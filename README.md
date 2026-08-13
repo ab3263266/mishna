@@ -1,8 +1,30 @@
-# Mishnah Tracker — Backend Design
+# Mishnah Tracker
 
-FastAPI + SQLAlchemy 2.0 + PostgreSQL. Daily Mishnah study tracker with streaks,
-multipliers, and a Shabbat mode that assumes the user is off-device from Friday
-afternoon to Saturday night.
+FastAPI + SQLAlchemy 2.0. Daily Mishnah study tracker with streaks, multipliers,
+and a Shabbat mode that assumes the user is off-device from Friday afternoon to
+Saturday night.
+
+Self-contained project — no relation to anything else on the Desktop.
+
+## Run it
+
+```bash
+python -m venv .venv
+.venv/Scripts/python.exe -m pip install -r requirements.txt
+.venv/Scripts/python.exe -m uvicorn app.main:app --reload --port 8010
+```
+
+Open <http://localhost:8010> for the Hebrew UI, or `/docs` for the API. First
+boot creates `mishnah.db` (SQLite) and seeds 63 tractates / 4,192 mishnayot.
+Nothing else to install.
+
+The dev bar at the bottom of the UI travels through time — a 4-day multiplier
+and a Shabbat freeze are otherwise only observable by waiting a week. It is
+gated behind `dev_mode` and 404s when that is off.
+
+**SQLite is for development only.** It has no row locks, so the concurrency
+guarantees in §5 are unenforced there. Point `DATABASE_URL` at PostgreSQL for
+anything real.
 
 ---
 
@@ -264,27 +286,65 @@ Friday's own half, it stays Friday.
 ## 9. Status
 
 ```bash
-python -m pytest tests/ -q
+.venv/Scripts/python.exe -m pytest tests/ -q
 ```
 
-- **25 passing** — `tests/test_rules.py`, pure business rules (multiplier
-  curve, penalty clamping, day boundaries across timezones, double-portion
-  quota, freeze window containment, report deadline, completion estimates). No
-  database needed.
-- **15 skipped** — `tests/test_settlement.py`, the engine's acceptance criteria.
-  These need PostgreSQL (`ON CONFLICT`, `FOR UPDATE`, partial indexes, JSONB —
-  SQLite emulates none of it) and **have not been executed yet**. Run them first
-  when you stand up a database.
+**42 passing.** `tests/test_rules.py` covers the pure rules with no database
+(multiplier curve, penalty clamping, day boundaries across timezones,
+double-portion quota, freeze-window containment, report deadlines, completion
+estimates, candle-lighting custom). `tests/test_settlement.py` drives the
+engine against a real database — SQLite by default, PostgreSQL via
+`TEST_DATABASE_URL`.
 
-Verified during development: the models import and emit correct PostgreSQL DDL,
-including both partial indexes (`WHERE status = 'active'`,
-`WHERE status IN ('pending','shabbat_pending')`).
+The models emit correct DDL on both dialects, including partial indexes
+(`WHERE status = 'active'`, `WHERE status IN ('pending','shabbat_pending')`).
+
+### Verified end-to-end through the running app
+
+Driven through the HTTP API and the browser UI against a real database:
+
+| Scenario | Result |
+|---|---|
+| Four consecutive days | 10, 10, 10, **15** — multiplier fires on day 4 |
+| Friday | requires 4 (double portion), freeze banner shown, penalties paused |
+| Shabbat | requires 0, streak held at 5 with no login and no penalty |
+| Motzash report at 21:06 | Friday +10, Shabbat +10, **bonus +5**, streak +2 |
+| Motzash report at 00:05 | Friday +15, Shabbat +15, **bonus 0** — past midnight |
+| Missed weekday | −15, streak → 0 |
+| Streak Freeze | −120, day marked `frozen_item`, streak held, inventory consumed |
+
+The two Motzash rows are the same code path five minutes apart, and are the
+clearest demonstration that the 03:00 study-day rollover and real civil
+midnight are deliberately different clocks.
+
+### Bugs this shook out
+
+Worth recording, because each one was invisible until something actually ran:
+
+1. **Candle lighting was hard-coded to 18 minutes.** Jerusalem's custom is 40,
+   so the freeze window opened 22 minutes late — in winter, after users had
+   already put the phone down. Now per-user (`candle_lighting_offset`).
+2. **`asdict()` vs `__dict__`.** Three handlers serialised `slots=True`
+   dataclasses via `__dict__`, which those do not have. Every write endpoint
+   returned a 500.
+3. **The UI branched on error prose, not error codes.** Onboarding never
+   appeared because it matched `"no_active_plan"` against the human-readable
+   message.
+4. **The SQLite path was relative to the launch directory**, so the database
+   silently followed whatever folder the server was started from. Now anchored
+   to the project root.
+5. **Partial indexes were partial only on PostgreSQL.** Without `sqlite_where`,
+   "one ACTIVE plan per user" became "one plan per user, ever" on SQLite.
 
 ### Not built yet
 
-- Alembic migrations (models are the source; `alembic revision --autogenerate`)
-- Tractate/mishnayot seed data — 63 tractates, ~4,200 rows, from Sefaria
+- Alembic migrations (models are the source; `alembic revision --autogenerate`).
+  `create_all` on boot is fine for SQLite, not for a Postgres deployment.
+- Real Google OAuth wiring — the flow is implemented in `core/security.py` but
+  has never run against Google; the UI uses `/dev/login` instead.
 - Achievement *rules* (tables and the hook exist; no engine)
+- Concurrency testing on PostgreSQL. The `FOR UPDATE` path is written but
+  unexercised — SQLite cannot prove it.
 - Yom Tov double-portion flow — Yom Tov currently never penalises and never
   credits without a log, mirroring an unreported Shabbat. The full
   Erev-Yom-Tov-carries-the-portion treatment reuses `_decide_shabbat`.

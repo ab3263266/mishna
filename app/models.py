@@ -246,12 +246,44 @@ class Tractate(Base):
     slug: Mapped[str] = mapped_column(String(64), unique=True)  # "berakhot"
     name_he: Mapped[str] = mapped_column(String(64))  # "ברכות"
     name_en: Mapped[str] = mapped_column(String(64))
+    #: The book title Sefaria actually resolves, e.g. "Mishnah Berakhot".
+    #: Every text and commentary ref is built from this, so it must be their
+    #: spelling and not ours (Uktzin vs Oktzin).
+    sefaria_title: Mapped[str] = mapped_column(String(96), default="")
     seder: Mapped[str] = mapped_column(String(32))  # "zeraim"
     order_index: Mapped[int] = mapped_column(SmallInteger)
     chapter_count: Mapped[int] = mapped_column(SmallInteger)
     #: Denormalised COUNT(mishnayot). Drives the completion estimate without a
     #: join, and is the one number the onboarding screen needs.
     mishnayot_count: Mapped[int] = mapped_column(Integer)
+
+
+class TextCache(Base):
+    """Sefaria passages, fetched once and kept.
+
+    The texts are fixed and centuries old, so there is no invalidation problem
+    - `fetched_at` exists for debugging, not expiry. Caching is not an
+    optimisation here but a correctness requirement: the study screen must
+    still render when Sefaria is slow, rate-limiting, or unreachable, and a
+    learner opening yesterday's mishnah on a train deserves the same.
+    """
+
+    __tablename__ = "text_cache"
+
+    ref: Mapped[str] = mapped_column(String(160), primary_key=True)
+    #: "mishnah" for the text itself, otherwise the commentator key.
+    kind: Mapped[str] = mapped_column(String(48), primary_key=True)
+
+    he_ref: Mapped[str | None] = mapped_column(String(160))
+    language: Mapped[str] = mapped_column(String(8), default="he")
+    body: Mapped[str] = mapped_column(Text)
+    #: Sefaria returns the licence per version; we surface it in the UI rather
+    #: than quietly reusing someone's work.
+    license: Mapped[str | None] = mapped_column(String(64))
+    version_title: Mapped[str | None] = mapped_column(String(200))
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class Mishnah(Base):

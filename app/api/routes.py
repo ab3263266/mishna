@@ -10,14 +10,22 @@ from __future__ import annotations
 from dataclasses import asdict
 from datetime import date
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.api.deps import CurrentUser, DbSession, IdempotencyKey
 from app.core.security import AuthError, exchange_code, issue_tokens, rotate_refresh_token, upsert_user
-from app.models import PointTransaction, ShopItem, StudyDay, Tractate, UserInventory
-from app.services import progress, settlement, shop, study
+from app.models import (
+    PlanStatus,
+    PointTransaction,
+    ShopItem,
+    StudyDay,
+    StudyPlan,
+    Tractate,
+    UserInventory,
+)
+from app.services import progress, settlement, shop, study, texts
 from app.services.study import StudyError
 
 router = APIRouter()
@@ -309,3 +317,115 @@ def transactions(user: CurrentUser, session: DbSession, limit: int = 50) -> list
         }
         for t in rows
     ]
+
+
+# --------------------------------------------------------------------------- #
+# The text - the reason the app exists
+# --------------------------------------------------------------------------- #
+
+
+def _portion_ordinals(plan, day) -> list[int]:
+    """The ordinals that make up this day's portion.
+
+    Anchored to where the day *started*, not to the current cursor, so the
+    whole portion stays on screen as the learner ticks through it instead of
+    vanishing mishnah by mishnah.
+    """
+    start = plan.current_ordinal - day.completed_units + 1
+    return [start + offset for offset in range(day.required_units)]
+
+
+@router.get("/study/portion")
+def study_portion(
+    user: CurrentUser,
+    session: DbSession,
+    background: BackgroundTasks,
+    commentaries: bool = True,
+) -> dict:
+    """Today's mishnayot, with text and commentaries."""
+    try:
+        state = study.today_state(session, user)
+    except StudyError as exc:
+        raise _handle(exc)
+
+    plan = session.execute(
+        select(StudyPlan).where(
+            StudyPlan.user_id == user.id, StudyPlan.status == PlanStatus.ACTIVE
+        )
+    ).scalar_one()
+    tractate = session.get(Tractate, plan.tractate_id)
+    day = session.execute(
+        select(StudyDay).where(
+            StudyDay.user_id == user.id,
+            StudyDay.local_date == state["local_date"],
+        )
+    ).scalar_one()
+
+    items = []
+    for ordinal in _portion_ordinals(plan, day):
+        if ordinal < 1 or ordinal > tractate.mishnayot_count:
+            continue
+        view = texts.get_mishnah(
+            session, tractate, ordinal, with_commentaries=commentaries
+        )
+        if view is None:
+            continue
+        payload = texts.as_dict(view)
+        payload["done"] = ordinal <= plan.current_ordinal
+        items.append(payload)
+
+    # Warm tomorrow's portion so the next open is instant.
+    next_start = plan.current_ordinal + 1
+    background.add_task(
+        _prefetch_later,
+        tractate.id,
+        [next_start + i for i in range(plan.daily_goal * 2)],
+    )
+
+    return {
+        "local_date": state["local_date"],
+        "tractate": tractate.name_he,
+        "required_units": day.required_units,
+        "completed_units": day.completed_units,
+        "is_double_portion": state["is_double_portion"],
+        "status": day.status,
+        "mishnayot": items,
+    }
+
+
+@router.get("/study/mishnah/{ordinal}")
+def single_mishnah(
+    ordinal: int, user: CurrentUser, session: DbSession, commentaries: bool = True
+) -> dict:
+    """Any mishnah in the active tractate - used for reviewing what came before."""
+    plan = session.execute(
+        select(StudyPlan).where(
+            StudyPlan.user_id == user.id, StudyPlan.status == PlanStatus.ACTIVE
+        )
+    ).scalar_one_or_none()
+    if plan is None:
+        raise HTTPException(409, {"code": "no_active_plan"})
+
+    tractate = session.get(Tractate, plan.tractate_id)
+    view = texts.get_mishnah(
+        session, tractate, ordinal, with_commentaries=commentaries
+    )
+    if view is None:
+        raise HTTPException(404, {"code": "no_such_mishnah"})
+
+    payload = texts.as_dict(view)
+    payload["done"] = ordinal <= plan.current_ordinal
+    payload["total"] = tractate.mishnayot_count
+    return payload
+
+
+def _prefetch_later(tractate_id: int, ordinals: list[int]) -> None:
+    """Runs after the response is sent, in its own session."""
+    from app.db.session import SessionLocal
+
+    with SessionLocal() as session:
+        tractate = session.get(Tractate, tractate_id)
+        if tractate is None:
+            return
+        texts.prefetch(session, tractate, ordinals)
+        session.commit()

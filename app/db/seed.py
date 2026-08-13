@@ -40,6 +40,7 @@ def seed_tractates(session: Session) -> int:
             slug=entry["slug"],
             name_he=entry["name_he"],
             name_en=entry["name_en"],
+            sefaria_title=entry.get("sefaria_title", f"Mishnah {entry['name_en']}"),
             seder=entry["seder"],
             order_index=entry["order_index"],
             chapter_count=entry["chapter_count"],
@@ -60,7 +61,9 @@ def seed_tractates(session: Session) -> int:
                         chapter=chapter_no,
                         number=mishnah_no,
                         ordinal=ordinal,
-                        sefaria_ref=f"{entry['name_en']} {chapter_no}:{mishnah_no}",
+                        sefaria_ref=(
+                            f"{tractate.sefaria_title} {chapter_no}:{mishnah_no}"
+                        ),
                     )
                 )
 

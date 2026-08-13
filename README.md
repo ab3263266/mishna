@@ -1,10 +1,17 @@
 # Mishnah Tracker
 
-FastAPI + SQLAlchemy 2.0. Daily Mishnah study tracker with streaks, multipliers,
-and a Shabbat mode that assumes the user is off-device from Friday afternoon to
-Saturday night.
+**Open the app, read today's mishnah with its commentaries, mark it learned.**
+That is the whole product. Everything below — streaks, points, penalties,
+Shabbat handling — exists to get someone to open it, and is deliberately
+confined to one thin strip at the top of the screen.
 
-Self-contained project — no relation to anything else on the Desktop.
+Each day shows the actual text of your mishnayot: vocalised Hebrew, with
+Bartenura, the Rambam, Tosafot Yom Tov, Ikar Tosafot Yom Tov, Tiferet Yisrael
+(Yachin and Boaz), and an English explanation. Bartenura opens by default; the
+rest are one tap away. Nikud toggles off for anyone who reads without it.
+
+FastAPI + SQLAlchemy 2.0. Self-contained project — no relation to anything else
+on the Desktop.
 
 ## Run it
 
@@ -23,12 +30,54 @@ and a Shabbat freeze are otherwise only observable by waiting a week. It is
 gated behind `dev_mode` and 404s when that is off.
 
 **SQLite is for development only.** It has no row locks, so the concurrency
-guarantees in §5 are unenforced there. Point `DATABASE_URL` at PostgreSQL for
+guarantees in §6 are unenforced there. Point `DATABASE_URL` at PostgreSQL for
 anything real.
 
 ---
 
-## 1. The three problems worth designing around
+## 1. The text layer (`services/texts.py`)
+
+The part people come for. Sourced from Sefaria's public API and cached
+permanently in `text_cache`.
+
+| Commentary | Ref pattern | Licence |
+|---|---|---|
+| ברטנורא | `Bartenura on {book} {ch}:{n}` | CC-BY-NC |
+| פירוש הרמב״ם | `Rambam on …` | Public Domain |
+| עיקר תוספות יום טוב | `Ikar Tosafot Yom Tov on …` | CC-BY-NC |
+| תוספות יום טוב | `Tosafot Yom Tov on …` | Public Domain |
+| תפארת ישראל – יכין / בועז | `Yachin on …` / `Boaz on …` | Public Domain |
+| English explanation | `English Explanation of …` | CC-BY (Dr. Joshua Kulp) |
+
+Three decisions worth naming:
+
+**Caching is correctness, not speed.** The texts are centuries old and never
+change, so there is no invalidation problem — `fetched_at` is for debugging,
+not expiry. The cache exists so the study screen still renders when Sefaria is
+slow, rate-limiting, or unreachable, and so yesterday's mishnah opens on a
+train. A cached read returns all seven commentaries in ~6ms. After each
+session the next portion is prefetched in a background task.
+
+**A missing commentary is normal.** Not every mishnah has an Ikar Tosafot Yom
+Tov; Berakhot 1:1 has seven commentaries and 1:2 has six. Misses are skipped
+silently rather than surfaced as errors.
+
+**Refs are built from Sefaria's spelling, not ours.** `tractates.sefaria_title`
+stores the title that actually resolved during seeding, because Sefaria files
+Uktzin as *Oktzin* — deriving refs from our own `name_en` would 404 every text
+in that tractate.
+
+Markup is sanitised server-side to an inline allow-list, and the client builds
+the node tree from that allow-list rather than assigning `innerHTML`. The bold
+lemma is kept deliberately: the dibur hamatchil a commentary opens with tells
+you which words it is on, so stripping all tags would lose meaning.
+
+Hebrew numerals are computed client-side for references — פרק א׳, משנה ב׳, and
+ט״ו / ט״ז rather than יה / יו.
+
+---
+
+## 2. The three problems worth designing around
 
 Most of this app is CRUD. Three things are not, and the whole structure follows
 from them.
@@ -53,7 +102,7 @@ happily punish observant users at 03:00 Saturday.
 
 ---
 
-## 2. Schema
+## 3. Schema
 
 ```mermaid
 erDiagram
@@ -107,7 +156,7 @@ even across a chapter boundary.
 
 ---
 
-## 3. Scoring (`services/scoring.py` — pure, no I/O)
+## 4. Scoring (`services/scoring.py` — pure, no I/O)
 
 ```
 points = base_points × multiplier(streak_after_this_day)
@@ -135,7 +184,7 @@ settlement engine when a day would otherwise be `MISSED` — no pre-arming, no
 
 ---
 
-## 4. Sabbath Mode
+## 5. Sabbath Mode
 
 ### The week
 
@@ -189,7 +238,7 @@ HaMoed — verified against Rosh Hashana 5787 and Pesach 5786.
 
 ---
 
-## 5. Settlement — the one function that moves the economy
+## 6. Settlement — the one function that moves the economy
 
 `services/settlement.py :: settle_user(session, user, now)`
 
@@ -233,7 +282,7 @@ ledger and `study_events`.
 
 ---
 
-## 6. Auth
+## 7. Auth
 
 Google **Authorization Code + PKCE**. The code is exchanged server-side so the
 client secret never reaches the browser, and the returned `id_token` is
@@ -250,7 +299,7 @@ revokes the whole chain for that user.
 
 ---
 
-## 7. API
+## 8. API
 
 | Method | Path | Notes |
 |---|---|---|
@@ -259,7 +308,9 @@ revokes the whole chain for that user.
 | `PUT` | `/me/preferences` | timezone, location, `observes_shabbat` |
 | `GET` | `/tractates` | onboarding picker |
 | `POST` | `/plans` | tractate + daily goal → **estimated completion date** |
-| `GET` | `/study/today` | home screen; settles first |
+| `GET` | `/study/today` | progress + streak state; settles first |
+| `GET` | `/study/portion` | **today's mishnayot with text and commentaries** |
+| `GET` | `/study/mishnah/{ordinal}` | any mishnah in the tractate, for review |
 | `POST` | `/study/log` | `Idempotency-Key` header |
 | `POST` | `/study/shabbat-report` | the Motzash checkbox |
 | `GET` | `/study/history` | streak heatmap |
@@ -271,7 +322,7 @@ in the HTTP layer, which is why the rules are testable without an app.
 
 ---
 
-## 8. Completion estimate
+## 9. Completion estimate
 
 A calendar **walk**, not `ceil(remaining / goal)` — division gets Shabbat wrong,
 since Friday carries double and Shabbat carries none. Walking also makes
@@ -283,18 +334,19 @@ Friday's own half, it stays Friday.
 
 ---
 
-## 9. Status
+## 10. Status
 
 ```bash
 .venv/Scripts/python.exe -m pytest tests/ -q
 ```
 
-**42 passing.** `tests/test_rules.py` covers the pure rules with no database
+**56 passing.** `tests/test_rules.py` covers the pure rules with no database
 (multiplier curve, penalty clamping, day boundaries across timezones,
 double-portion quota, freeze-window containment, report deadlines, completion
 estimates, candle-lighting custom). `tests/test_settlement.py` drives the
 engine against a real database — SQLite by default, PostgreSQL via
-`TEST_DATABASE_URL`.
+`TEST_DATABASE_URL`. `tests/test_texts.py` covers sanitisation and ref
+construction without touching the network.
 
 The models emit correct DDL on both dialects, including partial indexes
 (`WHERE status = 'active'`, `WHERE status IN ('pending','shabbat_pending')`).

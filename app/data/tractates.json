@@ -2,6 +2,7 @@
   {
     "slug": "berakhot",
     "name_en": "Berakhot",
+    "sefaria_title": "Mishnah Berakhot",
     "name_he": "ברכות",
     "seder": "zeraim",
     "seder_he": "זרעים",
@@ -23,6 +24,7 @@
   {
     "slug": "peah",
     "name_en": "Peah",
+    "sefaria_title": "Mishnah Peah",
     "name_he": "פאה",
     "seder": "zeraim",
     "seder_he": "זרעים",
@@ -43,6 +45,7 @@
   {
     "slug": "demai",
     "name_en": "Demai",
+    "sefaria_title": "Mishnah Demai",
     "name_he": "דמאי",
     "seder": "zeraim",
     "seder_he": "זרעים",
@@ -62,6 +65,7 @@
   {
     "slug": "kilayim",
     "name_en": "Kilayim",
+    "sefaria_title": "Mishnah Kilayim",
     "name_he": "כלאים",
     "seder": "zeraim",
     "seder_he": "זרעים",
@@ -83,6 +87,7 @@
   {
     "slug": "sheviit",
     "name_en": "Sheviit",
+    "sefaria_title": "Mishnah Sheviit",
     "name_he": "שביעית",
     "seder": "zeraim",
     "seder_he": "זרעים",
@@ -105,6 +110,7 @@
   {
     "slug": "terumot",
     "name_en": "Terumot",
+    "sefaria_title": "Mishnah Terumot",
     "name_he": "תרומות",
     "seder": "zeraim",
     "seder_he": "זרעים",
@@ -128,6 +134,7 @@
   {
     "slug": "maasrot",
     "name_en": "Maasrot",
+    "sefaria_title": "Mishnah Maasrot",
     "name_he": "מעשרות",
     "seder": "zeraim",
     "seder_he": "זרעים",
@@ -145,6 +152,7 @@
   {
     "slug": "maaser_sheni",
     "name_en": "Maaser Sheni",
+    "sefaria_title": "Mishnah Maaser Sheni",
     "name_he": "מעשר שני",
     "seder": "zeraim",
     "seder_he": "זרעים",
@@ -162,6 +170,7 @@
   {
     "slug": "challah",
     "name_en": "Challah",
+    "sefaria_title": "Mishnah Challah",
     "name_he": "חלה",
     "seder": "zeraim",
     "seder_he": "זרעים",
@@ -178,6 +187,7 @@
   {
     "slug": "orlah",
     "name_en": "Orlah",
+    "sefaria_title": "Mishnah Orlah",
     "name_he": "ערלה",
     "seder": "zeraim",
     "seder_he": "זרעים",
@@ -193,6 +203,7 @@
   {
     "slug": "bikkurim",
     "name_en": "Bikkurim",
+    "sefaria_title": "Mishnah Bikkurim",
     "name_he": "ביכורים",
     "seder": "zeraim",
     "seder_he": "זרעים",
@@ -209,6 +220,7 @@
   {
     "slug": "shabbat",
     "name_en": "Shabbat",
+    "sefaria_title": "Mishnah Shabbat",
     "name_he": "שבת",
     "seder": "moed",
     "seder_he": "מועד",
@@ -245,6 +257,7 @@
   {
     "slug": "eruvin",
     "name_en": "Eruvin",
+    "sefaria_title": "Mishnah Eruvin",
     "name_he": "עירובין",
     "seder": "moed",
     "seder_he": "מועד",
@@ -267,6 +280,7 @@
   {
     "slug": "pesachim",
     "name_en": "Pesachim",
+    "sefaria_title": "Mishnah Pesachim",
     "name_he": "פסחים",
     "seder": "moed",
     "seder_he": "מועד",
@@ -289,6 +303,7 @@
   {
     "slug": "shekalim",
     "name_en": "Shekalim",
+    "sefaria_title": "Mishnah Shekalim",
     "name_he": "שקלים",
     "seder": "moed",
     "seder_he": "מועד",
@@ -309,6 +324,7 @@
   {
     "slug": "yoma",
     "name_en": "Yoma",
+    "sefaria_title": "Mishnah Yoma",
     "name_he": "יומא",
     "seder": "moed",
     "seder_he": "מועד",
@@ -329,6 +345,7 @@
   {
     "slug": "sukkah",
     "name_en": "Sukkah",
+    "sefaria_title": "Mishnah Sukkah",
     "name_he": "סוכה",
     "seder": "moed",
     "seder_he": "מועד",
@@ -346,6 +363,7 @@
   {
     "slug": "beitzah",
     "name_en": "Beitzah",
+    "sefaria_title": "Mishnah Beitzah",
     "name_he": "ביצה",
     "seder": "moed",
     "seder_he": "מועד",
@@ -363,6 +381,7 @@
   {
     "slug": "rosh_hashanah",
     "name_en": "Rosh Hashanah",
+    "sefaria_title": "Mishnah Rosh Hashanah",
     "name_he": "ראש השנה",
     "seder": "moed",
     "seder_he": "מועד",
@@ -379,6 +398,7 @@
   {
     "slug": "taanit",
     "name_en": "Taanit",
+    "sefaria_title": "Mishnah Taanit",
     "name_he": "תענית",
     "seder": "moed",
     "seder_he": "מועד",
@@ -395,6 +415,7 @@
   {
     "slug": "megillah",
     "name_en": "Megillah",
+    "sefaria_title": "Mishnah Megillah",
     "name_he": "מגילה",
     "seder": "moed",
     "seder_he": "מועד",
@@ -411,6 +432,7 @@
   {
     "slug": "moed_katan",
     "name_en": "Moed Katan",
+    "sefaria_title": "Mishnah Moed Katan",
     "name_he": "מועד קטן",
     "seder": "moed",
     "seder_he": "מועד",
@@ -426,6 +448,7 @@
   {
     "slug": "chagigah",
     "name_en": "Chagigah",
+    "sefaria_title": "Mishnah Chagigah",
     "name_he": "חגיגה",
     "seder": "moed",
     "seder_he": "מועד",
@@ -441,6 +464,7 @@
   {
     "slug": "yevamot",
     "name_en": "Yevamot",
+    "sefaria_title": "Mishnah Yevamot",
     "name_he": "יבמות",
     "seder": "nashim",
     "seder_he": "נשים",
@@ -469,6 +493,7 @@
   {
     "slug": "ketubot",
     "name_en": "Ketubot",
+    "sefaria_title": "Mishnah Ketubot",
     "name_he": "כתובות",
     "seder": "nashim",
     "seder_he": "נשים",
@@ -494,6 +519,7 @@
   {
     "slug": "nedarim",
     "name_en": "Nedarim",
+    "sefaria_title": "Mishnah Nedarim",
     "name_he": "נדרים",
     "seder": "nashim",
     "seder_he": "נשים",
@@ -517,6 +543,7 @@
   {
     "slug": "nazir",
     "name_en": "Nazir",
+    "sefaria_title": "Mishnah Nazir",
     "name_he": "נזיר",
     "seder": "nashim",
     "seder_he": "נשים",
@@ -538,6 +565,7 @@
   {
     "slug": "sotah",
     "name_en": "Sotah",
+    "sefaria_title": "Mishnah Sotah",
     "name_he": "סוטה",
     "seder": "nashim",
     "seder_he": "נשים",
@@ -559,6 +587,7 @@
   {
     "slug": "gittin",
     "name_en": "Gittin",
+    "sefaria_title": "Mishnah Gittin",
     "name_he": "גיטין",
     "seder": "nashim",
     "seder_he": "נשים",
@@ -580,6 +609,7 @@
   {
     "slug": "kiddushin",
     "name_en": "Kiddushin",
+    "sefaria_title": "Mishnah Kiddushin",
     "name_he": "קידושין",
     "seder": "nashim",
     "seder_he": "נשים",
@@ -596,6 +626,7 @@
   {
     "slug": "bava_kamma",
     "name_en": "Bava Kamma",
+    "sefaria_title": "Mishnah Bava Kamma",
     "name_he": "בבא קמא",
     "seder": "nezikin",
     "seder_he": "נזיקין",
@@ -618,6 +649,7 @@
   {
     "slug": "bava_metzia",
     "name_en": "Bava Metzia",
+    "sefaria_title": "Mishnah Bava Metzia",
     "name_he": "בבא מציעא",
     "seder": "nezikin",
     "seder_he": "נזיקין",
@@ -640,6 +672,7 @@
   {
     "slug": "bava_batra",
     "name_en": "Bava Batra",
+    "sefaria_title": "Mishnah Bava Batra",
     "name_he": "בבא בתרא",
     "seder": "nezikin",
     "seder_he": "נזיקין",
@@ -662,6 +695,7 @@
   {
     "slug": "sanhedrin",
     "name_en": "Sanhedrin",
+    "sefaria_title": "Mishnah Sanhedrin",
     "name_he": "סנהדרין",
     "seder": "nezikin",
     "seder_he": "נזיקין",
@@ -685,6 +719,7 @@
   {
     "slug": "makkot",
     "name_en": "Makkot",
+    "sefaria_title": "Mishnah Makkot",
     "name_he": "מכות",
     "seder": "nezikin",
     "seder_he": "נזיקין",
@@ -700,6 +735,7 @@
   {
     "slug": "shevuot",
     "name_en": "Shevuot",
+    "sefaria_title": "Mishnah Shevuot",
     "name_he": "שבועות",
     "seder": "nezikin",
     "seder_he": "נזיקין",
@@ -720,6 +756,7 @@
   {
     "slug": "eduyot",
     "name_en": "Eduyot",
+    "sefaria_title": "Mishnah Eduyot",
     "name_he": "עדיות",
     "seder": "nezikin",
     "seder_he": "נזיקין",
@@ -740,6 +777,7 @@
   {
     "slug": "avodah_zarah",
     "name_en": "Avodah Zarah",
+    "sefaria_title": "Mishnah Avodah Zarah",
     "name_he": "עבודה זרה",
     "seder": "nezikin",
     "seder_he": "נזיקין",
@@ -757,6 +795,7 @@
   {
     "slug": "avot",
     "name_en": "Avot",
+    "sefaria_title": "Mishnah Avot",
     "name_he": "אבות",
     "seder": "nezikin",
     "seder_he": "נזיקין",
@@ -775,6 +814,7 @@
   {
     "slug": "horayot",
     "name_en": "Horayot",
+    "sefaria_title": "Mishnah Horayot",
     "name_he": "הוריות",
     "seder": "nezikin",
     "seder_he": "נזיקין",
@@ -790,6 +830,7 @@
   {
     "slug": "zevachim",
     "name_en": "Zevachim",
+    "sefaria_title": "Mishnah Zevachim",
     "name_he": "זבחים",
     "seder": "kodashim",
     "seder_he": "קדשים",
@@ -816,6 +857,7 @@
   {
     "slug": "menachot",
     "name_en": "Menachot",
+    "sefaria_title": "Mishnah Menachot",
     "name_he": "מנחות",
     "seder": "kodashim",
     "seder_he": "קדשים",
@@ -841,6 +883,7 @@
   {
     "slug": "chullin",
     "name_en": "Chullin",
+    "sefaria_title": "Mishnah Chullin",
     "name_he": "חולין",
     "seder": "kodashim",
     "seder_he": "קדשים",
@@ -865,6 +908,7 @@
   {
     "slug": "bekhorot",
     "name_en": "Bekhorot",
+    "sefaria_title": "Mishnah Bekhorot",
     "name_he": "בכורות",
     "seder": "kodashim",
     "seder_he": "קדשים",
@@ -886,6 +930,7 @@
   {
     "slug": "arakhin",
     "name_en": "Arakhin",
+    "sefaria_title": "Mishnah Arakhin",
     "name_he": "ערכין",
     "seder": "kodashim",
     "seder_he": "קדשים",
@@ -907,6 +952,7 @@
   {
     "slug": "temurah",
     "name_en": "Temurah",
+    "sefaria_title": "Mishnah Temurah",
     "name_he": "תמורה",
     "seder": "kodashim",
     "seder_he": "קדשים",
@@ -926,6 +972,7 @@
   {
     "slug": "keritot",
     "name_en": "Keritot",
+    "sefaria_title": "Mishnah Keritot",
     "name_he": "כריתות",
     "seder": "kodashim",
     "seder_he": "קדשים",
@@ -944,6 +991,7 @@
   {
     "slug": "meilah",
     "name_en": "Meilah",
+    "sefaria_title": "Mishnah Meilah",
     "name_he": "מעילה",
     "seder": "kodashim",
     "seder_he": "קדשים",
@@ -962,6 +1010,7 @@
   {
     "slug": "tamid",
     "name_en": "Tamid",
+    "sefaria_title": "Mishnah Tamid",
     "name_he": "תמיד",
     "seder": "kodashim",
     "seder_he": "קדשים",
@@ -981,6 +1030,7 @@
   {
     "slug": "middot",
     "name_en": "Middot",
+    "sefaria_title": "Mishnah Middot",
     "name_he": "מדות",
     "seder": "kodashim",
     "seder_he": "קדשים",
@@ -998,6 +1048,7 @@
   {
     "slug": "kinnim",
     "name_en": "Kinnim",
+    "sefaria_title": "Mishnah Kinnim",
     "name_he": "קינים",
     "seder": "kodashim",
     "seder_he": "קדשים",
@@ -1013,6 +1064,7 @@
   {
     "slug": "kelim",
     "name_en": "Kelim",
+    "sefaria_title": "Mishnah Kelim",
     "name_he": "כלים",
     "seder": "taharot",
     "seder_he": "טהרות",
@@ -1055,6 +1107,7 @@
   {
     "slug": "oholot",
     "name_en": "Oholot",
+    "sefaria_title": "Mishnah Oholot",
     "name_he": "אהלות",
     "seder": "taharot",
     "seder_he": "טהרות",
@@ -1085,6 +1138,7 @@
   {
     "slug": "negaim",
     "name_en": "Negaim",
+    "sefaria_title": "Mishnah Negaim",
     "name_he": "נגעים",
     "seder": "taharot",
     "seder_he": "טהרות",
@@ -1111,6 +1165,7 @@
   {
     "slug": "parah",
     "name_en": "Parah",
+    "sefaria_title": "Mishnah Parah",
     "name_he": "פרה",
     "seder": "taharot",
     "seder_he": "טהרות",
@@ -1135,6 +1190,7 @@
   {
     "slug": "tahorot",
     "name_en": "Tahorot",
+    "sefaria_title": "Mishnah Tahorot",
     "name_he": "טהרות",
     "seder": "taharot",
     "seder_he": "טהרות",
@@ -1157,6 +1213,7 @@
   {
     "slug": "mikvaot",
     "name_en": "Mikvaot",
+    "sefaria_title": "Mishnah Mikvaot",
     "name_he": "מקואות",
     "seder": "taharot",
     "seder_he": "טהרות",
@@ -1179,6 +1236,7 @@
   {
     "slug": "niddah",
     "name_en": "Niddah",
+    "sefaria_title": "Mishnah Niddah",
     "name_he": "נדה",
     "seder": "taharot",
     "seder_he": "טהרות",
@@ -1201,6 +1259,7 @@
   {
     "slug": "makhshirin",
     "name_en": "Makhshirin",
+    "sefaria_title": "Mishnah Makhshirin",
     "name_he": "מכשירין",
     "seder": "taharot",
     "seder_he": "טהרות",
@@ -1219,6 +1278,7 @@
   {
     "slug": "zavim",
     "name_en": "Zavim",
+    "sefaria_title": "Mishnah Zavim",
     "name_he": "זבים",
     "seder": "taharot",
     "seder_he": "טהרות",
@@ -1236,6 +1296,7 @@
   {
     "slug": "tevul_yom",
     "name_en": "Tevul Yom",
+    "sefaria_title": "Mishnah Tevul Yom",
     "name_he": "טבול יום",
     "seder": "taharot",
     "seder_he": "טהרות",
@@ -1252,6 +1313,7 @@
   {
     "slug": "yadayim",
     "name_en": "Yadayim",
+    "sefaria_title": "Mishnah Yadayim",
     "name_he": "ידים",
     "seder": "taharot",
     "seder_he": "טהרות",
@@ -1268,6 +1330,7 @@
   {
     "slug": "uktzin",
     "name_en": "Uktzin",
+    "sefaria_title": "Mishnah Oktzin",
     "name_he": "עוקצים",
     "seder": "taharot",
     "seder_he": "טהרות",

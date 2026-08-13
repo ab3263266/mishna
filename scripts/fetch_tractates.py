@@ -78,12 +78,18 @@ def fetch_shape(client: httpx.Client, title: str) -> list[int] | None:
     return None
 
 
-def fetch(client: httpx.Client, title: str) -> dict | None:
+def fetch(client: httpx.Client, title: str) -> tuple[dict, str] | None:
+    """Returns (index payload, the Sefaria book title that actually resolved).
+
+    We must record the resolved title, not our own spelling: every later text
+    and commentary lookup is built from it, and Sefaria disagrees with us on
+    at least one tractate (Uktzin/Oktzin).
+    """
     lookup = SEFARIA_ALIASES.get(title, title)
     for candidate in (f"Mishnah_{lookup.replace(' ', '_')}", lookup.replace(" ", "_")):
         response = client.get(f"https://www.sefaria.org/api/index/{candidate}")
         if response.status_code == 200:
-            return response.json()
+            return response.json(), candidate.replace("_", " ")
     return None
 
 
@@ -95,10 +101,11 @@ def main() -> int:
     with httpx.Client(timeout=30, follow_redirects=True) as client:
         for seder, tractates in SEDARIM.items():
             for title in tractates:
-                data = fetch(client, title)
-                if data is None:
+                found = fetch(client, title)
+                if found is None:
                     problems.append(f"{title}: not found")
                     continue
+                data, sefaria_title = found
 
                 schema = data.get("schema", {})
                 lengths = schema.get("lengths") or []
@@ -119,6 +126,7 @@ def main() -> int:
                     {
                         "slug": slugify(title),
                         "name_en": title,
+                        "sefaria_title": sefaria_title,
                         "name_he": schema.get("heTitle", title).replace("משנה ", ""),
                         "seder": seder,
                         "seder_he": SEDER_HE[seder],

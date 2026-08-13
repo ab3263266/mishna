@@ -1,0 +1,1283 @@
+[
+  {
+    "slug": "berakhot",
+    "name_en": "Berakhot",
+    "name_he": "ברכות",
+    "seder": "zeraim",
+    "seder_he": "זרעים",
+    "order_index": 1,
+    "chapter_count": 9,
+    "mishnayot_count": 57,
+    "chapter_lengths": [
+      5,
+      8,
+      6,
+      7,
+      5,
+      8,
+      5,
+      8,
+      5
+    ]
+  },
+  {
+    "slug": "peah",
+    "name_en": "Peah",
+    "name_he": "פאה",
+    "seder": "zeraim",
+    "seder_he": "זרעים",
+    "order_index": 2,
+    "chapter_count": 8,
+    "mishnayot_count": 69,
+    "chapter_lengths": [
+      6,
+      8,
+      8,
+      11,
+      8,
+      11,
+      8,
+      9
+    ]
+  },
+  {
+    "slug": "demai",
+    "name_en": "Demai",
+    "name_he": "דמאי",
+    "seder": "zeraim",
+    "seder_he": "זרעים",
+    "order_index": 3,
+    "chapter_count": 7,
+    "mishnayot_count": 53,
+    "chapter_lengths": [
+      4,
+      5,
+      6,
+      7,
+      11,
+      12,
+      8
+    ]
+  },
+  {
+    "slug": "kilayim",
+    "name_en": "Kilayim",
+    "name_he": "כלאים",
+    "seder": "zeraim",
+    "seder_he": "זרעים",
+    "order_index": 4,
+    "chapter_count": 9,
+    "mishnayot_count": 77,
+    "chapter_lengths": [
+      9,
+      11,
+      7,
+      9,
+      8,
+      9,
+      8,
+      6,
+      10
+    ]
+  },
+  {
+    "slug": "sheviit",
+    "name_en": "Sheviit",
+    "name_he": "שביעית",
+    "seder": "zeraim",
+    "seder_he": "זרעים",
+    "order_index": 5,
+    "chapter_count": 10,
+    "mishnayot_count": 89,
+    "chapter_lengths": [
+      8,
+      10,
+      10,
+      10,
+      9,
+      6,
+      7,
+      11,
+      9,
+      9
+    ]
+  },
+  {
+    "slug": "terumot",
+    "name_en": "Terumot",
+    "name_he": "תרומות",
+    "seder": "zeraim",
+    "seder_he": "זרעים",
+    "order_index": 6,
+    "chapter_count": 11,
+    "mishnayot_count": 101,
+    "chapter_lengths": [
+      10,
+      6,
+      9,
+      13,
+      9,
+      6,
+      7,
+      12,
+      7,
+      12,
+      10
+    ]
+  },
+  {
+    "slug": "maasrot",
+    "name_en": "Maasrot",
+    "name_he": "מעשרות",
+    "seder": "zeraim",
+    "seder_he": "זרעים",
+    "order_index": 7,
+    "chapter_count": 5,
+    "mishnayot_count": 40,
+    "chapter_lengths": [
+      8,
+      8,
+      10,
+      6,
+      8
+    ]
+  },
+  {
+    "slug": "maaser_sheni",
+    "name_en": "Maaser Sheni",
+    "name_he": "מעשר שני",
+    "seder": "zeraim",
+    "seder_he": "זרעים",
+    "order_index": 8,
+    "chapter_count": 5,
+    "mishnayot_count": 57,
+    "chapter_lengths": [
+      7,
+      10,
+      13,
+      12,
+      15
+    ]
+  },
+  {
+    "slug": "challah",
+    "name_en": "Challah",
+    "name_he": "חלה",
+    "seder": "zeraim",
+    "seder_he": "זרעים",
+    "order_index": 9,
+    "chapter_count": 4,
+    "mishnayot_count": 38,
+    "chapter_lengths": [
+      9,
+      8,
+      10,
+      11
+    ]
+  },
+  {
+    "slug": "orlah",
+    "name_en": "Orlah",
+    "name_he": "ערלה",
+    "seder": "zeraim",
+    "seder_he": "זרעים",
+    "order_index": 10,
+    "chapter_count": 3,
+    "mishnayot_count": 35,
+    "chapter_lengths": [
+      9,
+      17,
+      9
+    ]
+  },
+  {
+    "slug": "bikkurim",
+    "name_en": "Bikkurim",
+    "name_he": "ביכורים",
+    "seder": "zeraim",
+    "seder_he": "זרעים",
+    "order_index": 11,
+    "chapter_count": 4,
+    "mishnayot_count": 39,
+    "chapter_lengths": [
+      11,
+      11,
+      12,
+      5
+    ]
+  },
+  {
+    "slug": "shabbat",
+    "name_en": "Shabbat",
+    "name_he": "שבת",
+    "seder": "moed",
+    "seder_he": "מועד",
+    "order_index": 12,
+    "chapter_count": 24,
+    "mishnayot_count": 139,
+    "chapter_lengths": [
+      11,
+      7,
+      6,
+      2,
+      4,
+      10,
+      4,
+      7,
+      7,
+      6,
+      6,
+      6,
+      7,
+      4,
+      3,
+      8,
+      8,
+      3,
+      6,
+      5,
+      3,
+      6,
+      5,
+      5
+    ]
+  },
+  {
+    "slug": "eruvin",
+    "name_en": "Eruvin",
+    "name_he": "עירובין",
+    "seder": "moed",
+    "seder_he": "מועד",
+    "order_index": 13,
+    "chapter_count": 10,
+    "mishnayot_count": 96,
+    "chapter_lengths": [
+      10,
+      6,
+      9,
+      11,
+      9,
+      10,
+      11,
+      11,
+      4,
+      15
+    ]
+  },
+  {
+    "slug": "pesachim",
+    "name_en": "Pesachim",
+    "name_he": "פסחים",
+    "seder": "moed",
+    "seder_he": "מועד",
+    "order_index": 14,
+    "chapter_count": 10,
+    "mishnayot_count": 89,
+    "chapter_lengths": [
+      7,
+      8,
+      8,
+      9,
+      10,
+      6,
+      13,
+      8,
+      11,
+      9
+    ]
+  },
+  {
+    "slug": "shekalim",
+    "name_en": "Shekalim",
+    "name_he": "שקלים",
+    "seder": "moed",
+    "seder_he": "מועד",
+    "order_index": 15,
+    "chapter_count": 8,
+    "mishnayot_count": 52,
+    "chapter_lengths": [
+      7,
+      5,
+      4,
+      9,
+      6,
+      6,
+      7,
+      8
+    ]
+  },
+  {
+    "slug": "yoma",
+    "name_en": "Yoma",
+    "name_he": "יומא",
+    "seder": "moed",
+    "seder_he": "מועד",
+    "order_index": 16,
+    "chapter_count": 8,
+    "mishnayot_count": 61,
+    "chapter_lengths": [
+      8,
+      7,
+      11,
+      6,
+      7,
+      8,
+      5,
+      9
+    ]
+  },
+  {
+    "slug": "sukkah",
+    "name_en": "Sukkah",
+    "name_he": "סוכה",
+    "seder": "moed",
+    "seder_he": "מועד",
+    "order_index": 17,
+    "chapter_count": 5,
+    "mishnayot_count": 53,
+    "chapter_lengths": [
+      11,
+      9,
+      15,
+      10,
+      8
+    ]
+  },
+  {
+    "slug": "beitzah",
+    "name_en": "Beitzah",
+    "name_he": "ביצה",
+    "seder": "moed",
+    "seder_he": "מועד",
+    "order_index": 18,
+    "chapter_count": 5,
+    "mishnayot_count": 42,
+    "chapter_lengths": [
+      10,
+      10,
+      8,
+      7,
+      7
+    ]
+  },
+  {
+    "slug": "rosh_hashanah",
+    "name_en": "Rosh Hashanah",
+    "name_he": "ראש השנה",
+    "seder": "moed",
+    "seder_he": "מועד",
+    "order_index": 19,
+    "chapter_count": 4,
+    "mishnayot_count": 35,
+    "chapter_lengths": [
+      9,
+      9,
+      8,
+      9
+    ]
+  },
+  {
+    "slug": "taanit",
+    "name_en": "Taanit",
+    "name_he": "תענית",
+    "seder": "moed",
+    "seder_he": "מועד",
+    "order_index": 20,
+    "chapter_count": 4,
+    "mishnayot_count": 34,
+    "chapter_lengths": [
+      7,
+      10,
+      9,
+      8
+    ]
+  },
+  {
+    "slug": "megillah",
+    "name_en": "Megillah",
+    "name_he": "מגילה",
+    "seder": "moed",
+    "seder_he": "מועד",
+    "order_index": 21,
+    "chapter_count": 4,
+    "mishnayot_count": 33,
+    "chapter_lengths": [
+      11,
+      6,
+      6,
+      10
+    ]
+  },
+  {
+    "slug": "moed_katan",
+    "name_en": "Moed Katan",
+    "name_he": "מועד קטן",
+    "seder": "moed",
+    "seder_he": "מועד",
+    "order_index": 22,
+    "chapter_count": 3,
+    "mishnayot_count": 24,
+    "chapter_lengths": [
+      10,
+      5,
+      9
+    ]
+  },
+  {
+    "slug": "chagigah",
+    "name_en": "Chagigah",
+    "name_he": "חגיגה",
+    "seder": "moed",
+    "seder_he": "מועד",
+    "order_index": 23,
+    "chapter_count": 3,
+    "mishnayot_count": 23,
+    "chapter_lengths": [
+      8,
+      7,
+      8
+    ]
+  },
+  {
+    "slug": "yevamot",
+    "name_en": "Yevamot",
+    "name_he": "יבמות",
+    "seder": "nashim",
+    "seder_he": "נשים",
+    "order_index": 24,
+    "chapter_count": 16,
+    "mishnayot_count": 128,
+    "chapter_lengths": [
+      4,
+      10,
+      10,
+      13,
+      6,
+      6,
+      6,
+      6,
+      6,
+      9,
+      7,
+      6,
+      13,
+      9,
+      10,
+      7
+    ]
+  },
+  {
+    "slug": "ketubot",
+    "name_en": "Ketubot",
+    "name_he": "כתובות",
+    "seder": "nashim",
+    "seder_he": "נשים",
+    "order_index": 25,
+    "chapter_count": 13,
+    "mishnayot_count": 111,
+    "chapter_lengths": [
+      10,
+      10,
+      9,
+      12,
+      9,
+      7,
+      10,
+      8,
+      9,
+      6,
+      6,
+      4,
+      11
+    ]
+  },
+  {
+    "slug": "nedarim",
+    "name_en": "Nedarim",
+    "name_he": "נדרים",
+    "seder": "nashim",
+    "seder_he": "נשים",
+    "order_index": 26,
+    "chapter_count": 11,
+    "mishnayot_count": 90,
+    "chapter_lengths": [
+      4,
+      5,
+      11,
+      8,
+      6,
+      10,
+      9,
+      7,
+      10,
+      8,
+      12
+    ]
+  },
+  {
+    "slug": "nazir",
+    "name_en": "Nazir",
+    "name_he": "נזיר",
+    "seder": "nashim",
+    "seder_he": "נשים",
+    "order_index": 27,
+    "chapter_count": 9,
+    "mishnayot_count": 60,
+    "chapter_lengths": [
+      7,
+      10,
+      7,
+      7,
+      7,
+      11,
+      4,
+      2,
+      5
+    ]
+  },
+  {
+    "slug": "sotah",
+    "name_en": "Sotah",
+    "name_he": "סוטה",
+    "seder": "nashim",
+    "seder_he": "נשים",
+    "order_index": 28,
+    "chapter_count": 9,
+    "mishnayot_count": 67,
+    "chapter_lengths": [
+      9,
+      6,
+      8,
+      5,
+      5,
+      4,
+      8,
+      7,
+      15
+    ]
+  },
+  {
+    "slug": "gittin",
+    "name_en": "Gittin",
+    "name_he": "גיטין",
+    "seder": "nashim",
+    "seder_he": "נשים",
+    "order_index": 29,
+    "chapter_count": 9,
+    "mishnayot_count": 75,
+    "chapter_lengths": [
+      6,
+      7,
+      8,
+      9,
+      9,
+      7,
+      9,
+      10,
+      10
+    ]
+  },
+  {
+    "slug": "kiddushin",
+    "name_en": "Kiddushin",
+    "name_he": "קידושין",
+    "seder": "nashim",
+    "seder_he": "נשים",
+    "order_index": 30,
+    "chapter_count": 4,
+    "mishnayot_count": 47,
+    "chapter_lengths": [
+      10,
+      10,
+      13,
+      14
+    ]
+  },
+  {
+    "slug": "bava_kamma",
+    "name_en": "Bava Kamma",
+    "name_he": "בבא קמא",
+    "seder": "nezikin",
+    "seder_he": "נזיקין",
+    "order_index": 31,
+    "chapter_count": 10,
+    "mishnayot_count": 79,
+    "chapter_lengths": [
+      4,
+      6,
+      11,
+      9,
+      7,
+      6,
+      7,
+      7,
+      12,
+      10
+    ]
+  },
+  {
+    "slug": "bava_metzia",
+    "name_en": "Bava Metzia",
+    "name_he": "בבא מציעא",
+    "seder": "nezikin",
+    "seder_he": "נזיקין",
+    "order_index": 32,
+    "chapter_count": 10,
+    "mishnayot_count": 101,
+    "chapter_lengths": [
+      8,
+      11,
+      12,
+      12,
+      11,
+      8,
+      11,
+      9,
+      13,
+      6
+    ]
+  },
+  {
+    "slug": "bava_batra",
+    "name_en": "Bava Batra",
+    "name_he": "בבא בתרא",
+    "seder": "nezikin",
+    "seder_he": "נזיקין",
+    "order_index": 33,
+    "chapter_count": 10,
+    "mishnayot_count": 86,
+    "chapter_lengths": [
+      6,
+      14,
+      8,
+      9,
+      11,
+      8,
+      4,
+      8,
+      10,
+      8
+    ]
+  },
+  {
+    "slug": "sanhedrin",
+    "name_en": "Sanhedrin",
+    "name_he": "סנהדרין",
+    "seder": "nezikin",
+    "seder_he": "נזיקין",
+    "order_index": 34,
+    "chapter_count": 11,
+    "mishnayot_count": 71,
+    "chapter_lengths": [
+      6,
+      5,
+      8,
+      5,
+      5,
+      6,
+      11,
+      7,
+      6,
+      6,
+      6
+    ]
+  },
+  {
+    "slug": "makkot",
+    "name_en": "Makkot",
+    "name_he": "מכות",
+    "seder": "nezikin",
+    "seder_he": "נזיקין",
+    "order_index": 35,
+    "chapter_count": 3,
+    "mishnayot_count": 34,
+    "chapter_lengths": [
+      10,
+      8,
+      16
+    ]
+  },
+  {
+    "slug": "shevuot",
+    "name_en": "Shevuot",
+    "name_he": "שבועות",
+    "seder": "nezikin",
+    "seder_he": "נזיקין",
+    "order_index": 36,
+    "chapter_count": 8,
+    "mishnayot_count": 62,
+    "chapter_lengths": [
+      7,
+      5,
+      11,
+      13,
+      5,
+      7,
+      8,
+      6
+    ]
+  },
+  {
+    "slug": "eduyot",
+    "name_en": "Eduyot",
+    "name_he": "עדיות",
+    "seder": "nezikin",
+    "seder_he": "נזיקין",
+    "order_index": 37,
+    "chapter_count": 8,
+    "mishnayot_count": 74,
+    "chapter_lengths": [
+      14,
+      10,
+      12,
+      12,
+      7,
+      3,
+      9,
+      7
+    ]
+  },
+  {
+    "slug": "avodah_zarah",
+    "name_en": "Avodah Zarah",
+    "name_he": "עבודה זרה",
+    "seder": "nezikin",
+    "seder_he": "נזיקין",
+    "order_index": 38,
+    "chapter_count": 5,
+    "mishnayot_count": 50,
+    "chapter_lengths": [
+      9,
+      7,
+      10,
+      12,
+      12
+    ]
+  },
+  {
+    "slug": "avot",
+    "name_en": "Avot",
+    "name_he": "אבות",
+    "seder": "nezikin",
+    "seder_he": "נזיקין",
+    "order_index": 39,
+    "chapter_count": 6,
+    "mishnayot_count": 108,
+    "chapter_lengths": [
+      18,
+      16,
+      18,
+      22,
+      23,
+      11
+    ]
+  },
+  {
+    "slug": "horayot",
+    "name_en": "Horayot",
+    "name_he": "הוריות",
+    "seder": "nezikin",
+    "seder_he": "נזיקין",
+    "order_index": 40,
+    "chapter_count": 3,
+    "mishnayot_count": 20,
+    "chapter_lengths": [
+      5,
+      7,
+      8
+    ]
+  },
+  {
+    "slug": "zevachim",
+    "name_en": "Zevachim",
+    "name_he": "זבחים",
+    "seder": "kodashim",
+    "seder_he": "קדשים",
+    "order_index": 41,
+    "chapter_count": 14,
+    "mishnayot_count": 101,
+    "chapter_lengths": [
+      4,
+      5,
+      6,
+      6,
+      8,
+      7,
+      6,
+      12,
+      7,
+      8,
+      8,
+      6,
+      8,
+      10
+    ]
+  },
+  {
+    "slug": "menachot",
+    "name_en": "Menachot",
+    "name_he": "מנחות",
+    "seder": "kodashim",
+    "seder_he": "קדשים",
+    "order_index": 42,
+    "chapter_count": 13,
+    "mishnayot_count": 93,
+    "chapter_lengths": [
+      4,
+      5,
+      7,
+      5,
+      9,
+      7,
+      6,
+      7,
+      9,
+      9,
+      9,
+      5,
+      11
+    ]
+  },
+  {
+    "slug": "chullin",
+    "name_en": "Chullin",
+    "name_he": "חולין",
+    "seder": "kodashim",
+    "seder_he": "קדשים",
+    "order_index": 43,
+    "chapter_count": 12,
+    "mishnayot_count": 74,
+    "chapter_lengths": [
+      7,
+      10,
+      7,
+      7,
+      5,
+      7,
+      6,
+      6,
+      8,
+      4,
+      2,
+      5
+    ]
+  },
+  {
+    "slug": "bekhorot",
+    "name_en": "Bekhorot",
+    "name_he": "בכורות",
+    "seder": "kodashim",
+    "seder_he": "קדשים",
+    "order_index": 44,
+    "chapter_count": 9,
+    "mishnayot_count": 73,
+    "chapter_lengths": [
+      7,
+      9,
+      4,
+      10,
+      6,
+      12,
+      7,
+      10,
+      8
+    ]
+  },
+  {
+    "slug": "arakhin",
+    "name_en": "Arakhin",
+    "name_he": "ערכין",
+    "seder": "kodashim",
+    "seder_he": "קדשים",
+    "order_index": 45,
+    "chapter_count": 9,
+    "mishnayot_count": 50,
+    "chapter_lengths": [
+      4,
+      6,
+      5,
+      4,
+      6,
+      5,
+      5,
+      7,
+      8
+    ]
+  },
+  {
+    "slug": "temurah",
+    "name_en": "Temurah",
+    "name_he": "תמורה",
+    "seder": "kodashim",
+    "seder_he": "קדשים",
+    "order_index": 46,
+    "chapter_count": 7,
+    "mishnayot_count": 35,
+    "chapter_lengths": [
+      6,
+      3,
+      5,
+      4,
+      6,
+      5,
+      6
+    ]
+  },
+  {
+    "slug": "keritot",
+    "name_en": "Keritot",
+    "name_he": "כריתות",
+    "seder": "kodashim",
+    "seder_he": "קדשים",
+    "order_index": 47,
+    "chapter_count": 6,
+    "mishnayot_count": 43,
+    "chapter_lengths": [
+      7,
+      6,
+      10,
+      3,
+      8,
+      9
+    ]
+  },
+  {
+    "slug": "meilah",
+    "name_en": "Meilah",
+    "name_he": "מעילה",
+    "seder": "kodashim",
+    "seder_he": "קדשים",
+    "order_index": 48,
+    "chapter_count": 6,
+    "mishnayot_count": 38,
+    "chapter_lengths": [
+      4,
+      9,
+      8,
+      6,
+      5,
+      6
+    ]
+  },
+  {
+    "slug": "tamid",
+    "name_en": "Tamid",
+    "name_he": "תמיד",
+    "seder": "kodashim",
+    "seder_he": "קדשים",
+    "order_index": 49,
+    "chapter_count": 7,
+    "mishnayot_count": 34,
+    "chapter_lengths": [
+      4,
+      5,
+      9,
+      3,
+      6,
+      3,
+      4
+    ]
+  },
+  {
+    "slug": "middot",
+    "name_en": "Middot",
+    "name_he": "מדות",
+    "seder": "kodashim",
+    "seder_he": "קדשים",
+    "order_index": 50,
+    "chapter_count": 5,
+    "mishnayot_count": 34,
+    "chapter_lengths": [
+      9,
+      6,
+      8,
+      7,
+      4
+    ]
+  },
+  {
+    "slug": "kinnim",
+    "name_en": "Kinnim",
+    "name_he": "קינים",
+    "seder": "kodashim",
+    "seder_he": "קדשים",
+    "order_index": 51,
+    "chapter_count": 3,
+    "mishnayot_count": 15,
+    "chapter_lengths": [
+      4,
+      5,
+      6
+    ]
+  },
+  {
+    "slug": "kelim",
+    "name_en": "Kelim",
+    "name_he": "כלים",
+    "seder": "taharot",
+    "seder_he": "טהרות",
+    "order_index": 52,
+    "chapter_count": 30,
+    "mishnayot_count": 254,
+    "chapter_lengths": [
+      9,
+      8,
+      8,
+      4,
+      11,
+      4,
+      6,
+      11,
+      8,
+      8,
+      9,
+      8,
+      8,
+      8,
+      6,
+      8,
+      17,
+      9,
+      10,
+      7,
+      3,
+      10,
+      5,
+      17,
+      9,
+      9,
+      12,
+      10,
+      8,
+      4
+    ]
+  },
+  {
+    "slug": "oholot",
+    "name_en": "Oholot",
+    "name_he": "אהלות",
+    "seder": "taharot",
+    "seder_he": "טהרות",
+    "order_index": 53,
+    "chapter_count": 18,
+    "mishnayot_count": 134,
+    "chapter_lengths": [
+      8,
+      7,
+      7,
+      3,
+      7,
+      7,
+      6,
+      6,
+      16,
+      7,
+      9,
+      8,
+      6,
+      7,
+      10,
+      5,
+      5,
+      10
+    ]
+  },
+  {
+    "slug": "negaim",
+    "name_en": "Negaim",
+    "name_he": "נגעים",
+    "seder": "taharot",
+    "seder_he": "טהרות",
+    "order_index": 54,
+    "chapter_count": 14,
+    "mishnayot_count": 115,
+    "chapter_lengths": [
+      6,
+      5,
+      8,
+      11,
+      5,
+      8,
+      5,
+      10,
+      3,
+      10,
+      12,
+      7,
+      12,
+      13
+    ]
+  },
+  {
+    "slug": "parah",
+    "name_en": "Parah",
+    "name_he": "פרה",
+    "seder": "taharot",
+    "seder_he": "טהרות",
+    "order_index": 55,
+    "chapter_count": 12,
+    "mishnayot_count": 96,
+    "chapter_lengths": [
+      4,
+      5,
+      11,
+      4,
+      9,
+      5,
+      12,
+      11,
+      9,
+      6,
+      9,
+      11
+    ]
+  },
+  {
+    "slug": "tahorot",
+    "name_en": "Tahorot",
+    "name_he": "טהרות",
+    "seder": "taharot",
+    "seder_he": "טהרות",
+    "order_index": 56,
+    "chapter_count": 10,
+    "mishnayot_count": 92,
+    "chapter_lengths": [
+      9,
+      8,
+      8,
+      13,
+      9,
+      10,
+      9,
+      9,
+      9,
+      8
+    ]
+  },
+  {
+    "slug": "mikvaot",
+    "name_en": "Mikvaot",
+    "name_he": "מקואות",
+    "seder": "taharot",
+    "seder_he": "טהרות",
+    "order_index": 57,
+    "chapter_count": 10,
+    "mishnayot_count": 71,
+    "chapter_lengths": [
+      8,
+      10,
+      4,
+      5,
+      6,
+      11,
+      7,
+      5,
+      7,
+      8
+    ]
+  },
+  {
+    "slug": "niddah",
+    "name_en": "Niddah",
+    "name_he": "נדה",
+    "seder": "taharot",
+    "seder_he": "טהרות",
+    "order_index": 58,
+    "chapter_count": 10,
+    "mishnayot_count": 79,
+    "chapter_lengths": [
+      7,
+      7,
+      7,
+      7,
+      9,
+      14,
+      5,
+      4,
+      11,
+      8
+    ]
+  },
+  {
+    "slug": "makhshirin",
+    "name_en": "Makhshirin",
+    "name_he": "מכשירין",
+    "seder": "taharot",
+    "seder_he": "טהרות",
+    "order_index": 59,
+    "chapter_count": 6,
+    "mishnayot_count": 54,
+    "chapter_lengths": [
+      6,
+      11,
+      8,
+      10,
+      11,
+      8
+    ]
+  },
+  {
+    "slug": "zavim",
+    "name_en": "Zavim",
+    "name_he": "זבים",
+    "seder": "taharot",
+    "seder_he": "טהרות",
+    "order_index": 60,
+    "chapter_count": 5,
+    "mishnayot_count": 32,
+    "chapter_lengths": [
+      6,
+      4,
+      3,
+      7,
+      12
+    ]
+  },
+  {
+    "slug": "tevul_yom",
+    "name_en": "Tevul Yom",
+    "name_he": "טבול יום",
+    "seder": "taharot",
+    "seder_he": "טהרות",
+    "order_index": 61,
+    "chapter_count": 4,
+    "mishnayot_count": 26,
+    "chapter_lengths": [
+      5,
+      8,
+      6,
+      7
+    ]
+  },
+  {
+    "slug": "yadayim",
+    "name_en": "Yadayim",
+    "name_he": "ידים",
+    "seder": "taharot",
+    "seder_he": "טהרות",
+    "order_index": 62,
+    "chapter_count": 4,
+    "mishnayot_count": 22,
+    "chapter_lengths": [
+      5,
+      4,
+      5,
+      8
+    ]
+  },
+  {
+    "slug": "uktzin",
+    "name_en": "Uktzin",
+    "name_he": "עוקצים",
+    "seder": "taharot",
+    "seder_he": "טהרות",
+    "order_index": 63,
+    "chapter_count": 3,
+    "mishnayot_count": 28,
+    "chapter_lengths": [
+      6,
+      10,
+      12
+    ]
+  }
+]

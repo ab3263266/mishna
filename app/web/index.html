@@ -19,76 +19,93 @@
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);
        font-family:"Segoe UI","Assistant",system-ui,sans-serif;line-height:1.6}
-  .wrap{max-width:720px;margin:0 auto;padding:0 16px 130px}
+  .wrap{max-width:760px;margin:0 auto;padding:0 16px 150px}
   .hidden{display:none!important}
   button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--line);
-         background:var(--card);color:var(--ink);padding:10px 16px;font-weight:600}
-  button:hover{filter:brightness(.97)} button:disabled{opacity:.45;cursor:not-allowed}
+         background:var(--card);color:var(--ink);padding:10px 15px;font-weight:600}
+  button:hover{filter:brightness(.97)} button:disabled{opacity:.4;cursor:not-allowed}
   button.primary{background:var(--accent);border-color:transparent;color:var(--accent-ink)}
+  button.danger{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 35%,var(--line))}
   button.wide{width:100%}
-  .row{display:flex;gap:8px;flex-wrap:wrap}
-  select,input{width:100%;padding:11px 13px;border-radius:10px;
-               border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit}
+  button.small{padding:6px 11px;font-size:13px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  select,input{padding:10px 12px;border-radius:10px;border:1px solid var(--line);
+               background:var(--bg);color:var(--ink);font:inherit;max-width:100%}
+  select.full,input.full{width:100%}
   label{display:block;font-size:13px;color:var(--muted);margin:14px 0 6px;font-weight:600}
 
-  /* ---- slim status strip: the gamification, deliberately small ---- */
-  .strip{position:sticky;top:0;z-index:30;background:color-mix(in srgb,var(--bg) 88%,transparent);
+  .strip{position:sticky;top:0;z-index:30;background:color-mix(in srgb,var(--bg) 90%,transparent);
          backdrop-filter:blur(8px);border-bottom:1px solid var(--line);
-         margin:0 -16px 20px;padding:9px 16px;display:flex;align-items:center;
-         gap:14px;font-size:13px;color:var(--muted)}
-  .strip .where{flex:1;font-weight:700;color:var(--ink);font-size:14px}
-  .strip b{color:var(--ink)}
+         margin:0 -16px;padding:9px 16px;display:flex;align-items:center;gap:13px;font-size:13px}
+  .strip .where{flex:1;font-weight:700;font-size:14px}
+  .strip .stat{color:var(--muted)} .strip .stat b{color:var(--ink)}
 
-  /* ---- the mishnah itself: the hero ---- */
+  .tabs{display:flex;gap:4px;margin:0 -16px 18px;padding:8px 16px 0;
+        border-bottom:1px solid var(--line);position:sticky;top:41px;z-index:29;
+        background:color-mix(in srgb,var(--bg) 90%,transparent);backdrop-filter:blur(8px)}
+  .tabs button{border:0;background:none;border-radius:9px 9px 0 0;padding:9px 14px;
+               color:var(--muted);font-weight:700;border-bottom:2.5px solid transparent}
+  .tabs button.on{color:var(--accent);border-bottom-color:var(--accent)}
+
+  .hint{background:color-mix(in srgb,var(--accent) 8%,transparent);
+        border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);
+        border-radius:11px;padding:12px 15px;margin-bottom:16px;font-size:14px}
+  .hint b{display:block;margin-bottom:2px}
+  .hint .step{color:var(--muted);font-size:13px}
+
   .mishnah{background:var(--card);border:1px solid var(--line);border-radius:14px;
-           padding:26px 26px 20px;margin-bottom:16px;box-shadow:var(--shadow);position:relative}
-  .mishnah.done{border-color:color-mix(in srgb,var(--good) 40%,var(--line))}
-  .mishnah-head{display:flex;align-items:baseline;gap:10px;margin-bottom:16px;
-                padding-bottom:12px;border-bottom:2px solid var(--rule)}
-  .mishnah-head h2{margin:0;font-size:17px;letter-spacing:-.2px}
+           padding:24px;margin-bottom:16px;box-shadow:var(--shadow)}
+  .mishnah.done{border-color:color-mix(in srgb,var(--good) 45%,var(--line))}
+  .mishnah-head{display:flex;align-items:baseline;gap:10px;margin-bottom:15px;
+                padding-bottom:11px;border-bottom:2px solid var(--rule)}
+  .mishnah-head h2{margin:0;font-size:17px}
   .mishnah-head .tick{margin-inline-start:auto;font-size:13px;color:var(--good);font-weight:700}
-
   .text{font-family:"Frank Ruhl Libre","David Libre","Times New Roman",serif;
-        font-size:23px;line-height:2.05;text-align:justify;
-        -webkit-font-feature-settings:"kern";font-kerning:normal}
-  .text b{font-weight:700}
-  body.no-nikud .text{font-family:"Frank Ruhl Libre","David Libre",serif}
-
-  .srcline{margin-top:14px;font-size:11.5px;color:var(--muted);
-           display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+        font-size:23px;line-height:2.05;text-align:justify}
+  .srcline{margin-top:13px;font-size:11.5px;color:var(--muted)}
   .srcline a{color:var(--muted)}
 
-  /* ---- commentaries ---- */
-  .comm{margin-top:18px;border-top:1px solid var(--line);padding-top:4px}
-  details{border-bottom:1px solid var(--line)}
-  details:last-child{border-bottom:0}
-  summary{cursor:pointer;padding:12px 2px;font-weight:700;font-size:15px;
+  .comm{margin-top:16px;border-top:1px solid var(--line)}
+  details{border-bottom:1px solid var(--line)} details:last-child{border-bottom:0}
+  summary{cursor:pointer;padding:11px 2px;font-weight:700;font-size:15px;
           list-style:none;display:flex;align-items:center;gap:8px}
   summary::-webkit-details-marker{display:none}
-  summary::before{content:"›";display:inline-block;transition:transform .18s;
-                  color:var(--accent);font-size:19px;font-weight:700}
+  summary::before{content:"›";color:var(--accent);font-size:19px;transition:transform .18s}
   details[open] summary::before{transform:rotate(90deg)}
   summary .lic{margin-inline-start:auto;font-size:10.5px;font-weight:500;color:var(--muted)}
-  .comm-body{padding:2px 2px 16px;font-family:"Frank Ruhl Libre","David Libre",serif;
-             font-size:18px;line-height:1.95;text-align:justify;color:var(--ink)}
+  .comm-body{padding:2px 2px 15px;font-family:"Frank Ruhl Libre","David Libre",serif;
+             font-size:18px;line-height:1.95;text-align:justify}
   .comm-body[lang=en]{font-family:Georgia,serif;font-size:16px;direction:ltr;text-align:left}
   .comm-body b{color:var(--accent)}
 
   .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
         padding:20px;margin-bottom:14px;box-shadow:var(--shadow)}
-  .card h2{margin:0 0 4px;font-size:17px}
-  .sub{color:var(--muted);font-size:13.5px;margin:0}
-  .kv{display:flex;justify-content:space-between;padding:8px 0;
-      border-bottom:1px solid var(--line);font-size:14px}
-  .kv:last-child{border:0} .kv span:last-child{font-weight:700}
+  .card h2{margin:0 0 3px;font-size:16px}
+  .card .sub{color:var(--muted);font-size:13px;margin:0 0 4px}
+  .kv{display:flex;justify-content:space-between;align-items:center;gap:10px;
+      padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}
+  .kv:last-child{border:0} .kv>span:last-child{font-weight:700;text-align:start}
 
-  .actions{position:fixed;inset-inline:0;bottom:44px;z-index:35;padding:0 16px;
-           pointer-events:none}
-  .actions .inner{max-width:720px;margin:0 auto;pointer-events:auto}
-  .actions button{box-shadow:0 6px 20px rgba(0,0,0,.16)}
+  /* Shas overview */
+  .seder{margin-bottom:18px}
+  .seder h3{margin:0 0 3px;font-size:15px;display:flex;align-items:baseline;gap:8px}
+  .seder h3 small{color:var(--muted);font-weight:500;margin-inline-start:auto;font-size:12px}
+  .trac{display:flex;align-items:center;gap:10px;padding:7px 0;font-size:14px;
+        border-bottom:1px solid var(--line)}
+  .trac:last-child{border:0}
+  .trac .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .trac .nm .badge{font-size:10px;background:var(--accent);color:var(--accent-ink);
+                   padding:1px 6px;border-radius:4px;margin-inline-start:6px;font-weight:700}
+  .bar{width:96px;height:7px;border-radius:99px;background:var(--line);overflow:hidden;flex:none}
+  .bar i{display:block;height:100%;background:var(--accent);border-radius:99px}
+  .trac.done .bar i{background:var(--good)}
+  .trac .cnt{font-size:12px;color:var(--muted);width:66px;text-align:start;flex:none;
+             font-variant-numeric:tabular-nums}
 
-  .banner{border-radius:11px;padding:13px 15px;margin-bottom:14px;font-size:14px;
-          border:1px solid transparent}
+  .nav{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+  .nav .grow{flex:1}
+
+  .banner{border-radius:11px;padding:13px 15px;margin-bottom:14px;font-size:14px;border:1px solid transparent}
   .banner.shabbat{background:color-mix(in srgb,var(--shabbat) 12%,transparent);
                   border-color:color-mix(in srgb,var(--shabbat) 35%,transparent)}
   .banner.freeze{background:color-mix(in srgb,var(--freeze) 12%,transparent);
@@ -103,17 +120,19 @@
   .day.frozen_item{background:var(--freeze);color:#fff}
   .day.shabbat_unreported,.day.shabbat_pending{background:var(--shabbat);color:#fff;opacity:.75}
 
-  .toast{position:fixed;inset-inline:0;bottom:100px;margin:0 auto;width:max-content;
+  .actions{position:fixed;inset-inline:0;bottom:42px;z-index:35;padding:0 16px;pointer-events:none}
+  .actions .inner{max-width:760px;margin:0 auto;pointer-events:auto}
+  .actions button{box-shadow:0 6px 20px rgba(0,0,0,.18);padding:14px}
+  .toast{position:fixed;inset-inline:0;bottom:105px;margin:0 auto;width:max-content;
          max-width:88%;background:var(--ink);color:var(--bg);padding:11px 20px;
          border-radius:999px;font-weight:600;font-size:14px;opacity:0;
          pointer-events:none;transition:opacity .25s;z-index:60}
   .toast.show{opacity:1}
-
   .devbar{position:fixed;inset-inline:0;bottom:0;background:var(--card);
-          border-top:1px solid var(--line);padding:6px 12px;z-index:40}
-  .devbar .inner{max-width:720px;margin:0 auto;display:flex;gap:6px;
-                 align-items:center;flex-wrap:wrap;font-size:12px}
-  .devbar button{padding:5px 9px;font-size:12px;border-radius:8px}
+          border-top:1px solid var(--line);padding:5px 12px;z-index:40}
+  .devbar .inner{max-width:760px;margin:0 auto;display:flex;gap:6px;align-items:center;
+                 flex-wrap:wrap;font-size:12px}
+  .devbar button{padding:4px 9px;font-size:11.5px;border-radius:7px}
   .devbar .clock{color:var(--muted);margin-inline-end:auto}
   .tag{font-size:10px;background:var(--accent);color:var(--accent-ink);
        padding:2px 6px;border-radius:4px;font-weight:700}
@@ -124,13 +143,13 @@
 <div class="wrap">
 
   <section id="screen-login">
-    <div class="card" style="margin-top:60px">
+    <div class="card" style="margin-top:56px">
       <h2>משנה יומית</h2>
       <p class="sub">לימוד משנה יומי — הטקסט, הפירושים, ומעקב.</p>
       <label for="email">אימייל</label>
-      <input id="email" value="demo@example.com" autocomplete="off">
+      <input id="email" class="full" value="demo@example.com" autocomplete="off">
       <label for="shabbat-mode">שמירת שבת</label>
-      <select id="shabbat-mode">
+      <select id="shabbat-mode" class="full">
         <option value="1">כן — הפעל מצב שבת</option>
         <option value="0">לא</option>
       </select>
@@ -141,51 +160,144 @@
   </section>
 
   <section id="screen-onboarding" class="hidden">
-    <div class="card" style="margin-top:40px">
+    <div class="card" style="margin-top:36px">
       <h2>מה לומדים?</h2>
-      <p class="sub">63 מסכתות, 4,192 משניות.</p>
-      <label for="tractate">מסכת</label>
-      <select id="tractate"></select>
-      <label for="goal">כמה משניות ביום</label>
-      <select id="goal">
+      <p class="sub">בחר מסכת, מאיפה להתחיל, וכמה משניות ביום.</p>
+
+      <label for="ob-tractate">מסכת</label>
+      <select id="ob-tractate" class="full" onchange="obTractateChanged()"></select>
+
+      <label>מאיפה להתחיל</label>
+      <div class="row">
+        <select id="ob-chapter" onchange="obChapterChanged()" style="flex:1"></select>
+        <select id="ob-mishnah" style="flex:1"></select>
+      </div>
+
+      <label for="ob-goal">כמה משניות ללמוד ביום</label>
+      <select id="ob-goal" class="full" onchange="obPreview()">
         <option>1</option><option selected>2</option><option>3</option>
         <option>4</option><option>5</option><option>10</option>
       </select>
-      <div class="row" style="margin-top:18px">
-        <button class="primary wide" onclick="createPlan()">התחל</button>
-      </div>
+
+      <div id="ob-preview" class="hint" style="margin-top:16px"></div>
+      <button class="primary wide" onclick="createPlan()">התחל ללמוד</button>
     </div>
   </section>
 
   <section id="screen-app" class="hidden">
     <div class="strip">
       <span class="where" id="where">—</span>
-      <span title="רצף">🔥 <b id="streak">0</b></span>
-      <span title="נקודות">✦ <b id="points">0</b></span>
-      <button onclick="toggleNikud()" style="padding:4px 9px;font-size:11.5px"
-              id="nikud-btn" title="ניקוד">אָ</button>
+      <span class="stat" title="רצף ימים">🔥 <b id="streak">0</b></span>
+      <span class="stat" title="נקודות">✦ <b id="points">0</b></span>
+      <button class="small" onclick="toggleNikud()" id="nikud-btn"
+              title="הצג/הסתר ניקוד">אָ</button>
     </div>
 
-    <div id="banners"></div>
-    <div id="portion"><div class="spinner">טוען…</div></div>
+    <nav class="tabs">
+      <button id="tab-today"    class="on" onclick="switchTab('today')">היום</button>
+      <button id="tab-browse"   onclick="switchTab('browse')">עיון</button>
+      <button id="tab-shas"     onclick="switchTab('shas')">הש״ס</button>
+      <button id="tab-settings" onclick="switchTab('settings')">הגדרות</button>
+    </nav>
 
-    <div id="shabbat-report" class="hidden">
-      <button class="primary wide" onclick="reportShabbat()">
-        ✓ למדתי את המנה הכפולה בשבת
-      </button>
-    </div>
-
-    <details class="card" style="margin-top:20px">
-      <summary style="font-size:16px">התקדמות ורצף</summary>
-      <div style="padding-top:10px">
-        <div class="kv"><span>הושלמו</span><span id="p-done">—</span></div>
-        <div class="kv"><span>סיום משוער</span><span id="p-eta">—</span></div>
-        <div class="kv"><span>הרצף הארוך ביותר</span><span id="p-longest">—</span></div>
-        <div class="kv"><span>נקודות</span><span id="p-points">—</span></div>
-        <div class="grid" id="history"></div>
-        <div id="shop" style="margin-top:14px"></div>
+    <!-- ===== TODAY ===== -->
+    <div id="pane-today">
+      <div id="banners"></div>
+      <div class="hint" id="today-hint"></div>
+      <div id="portion"><div class="spinner">טוען…</div></div>
+      <div id="shabbat-report" class="hidden">
+        <button class="primary wide" onclick="reportShabbat()">
+          ✓ למדתי את המנה הכפולה בשבת — קבל נקודות לשישי ולשבת
+        </button>
       </div>
-    </details>
+    </div>
+
+    <!-- ===== BROWSE ===== -->
+    <div id="pane-browse" class="hidden">
+      <div class="hint">
+        <b>עיון חופשי</b>
+        <span class="step">בחר פרק ומשנה, או דפדף עם החצים. הלימוד כאן אינו נרשם —
+        רק המשניות של היום נספרות לרצף.</span>
+      </div>
+      <div class="card">
+        <div class="row">
+          <div style="flex:1">
+            <label for="br-chapter" style="margin-top:0">פרק</label>
+            <select id="br-chapter" class="full" onchange="brChapterChanged()"></select>
+          </div>
+          <div style="flex:1">
+            <label for="br-mishnah" style="margin-top:0">משנה</label>
+            <select id="br-mishnah" class="full" onchange="browseGo()"></select>
+          </div>
+        </div>
+        <div class="nav" style="margin:14px 0 0">
+          <button onclick="browseStep(-1)" id="br-prev">← הקודמת</button>
+          <button onclick="browseStep(1)" id="br-next">הבאה →</button>
+          <span class="grow"></span>
+          <button class="small" onclick="switchTab('today')">חזרה ללימוד היום</button>
+        </div>
+      </div>
+      <div id="browse-view"></div>
+    </div>
+
+    <!-- ===== SHAS ===== -->
+    <div id="pane-shas" class="hidden">
+      <div class="hint" id="shas-summary"></div>
+      <div id="shas-list"><div class="spinner">טוען…</div></div>
+    </div>
+
+    <!-- ===== SETTINGS ===== -->
+    <div id="pane-settings" class="hidden">
+      <div class="card">
+        <h2>המסכת הנוכחית</h2>
+        <p class="sub" id="set-current">—</p>
+        <div class="kv"><span>סיום משוער</span><span id="set-eta">—</span></div>
+
+        <label for="set-goal">כמה משניות ביום</label>
+        <div class="row">
+          <select id="set-goal" onchange="setPreview()" style="flex:1"></select>
+          <button class="primary" onclick="saveGoal()">שמור יעד</button>
+        </div>
+        <p class="sub" id="set-goal-preview" style="margin-top:8px"></p>
+
+        <label>קפוץ למשנה אחרת במסכת</label>
+        <p class="sub">משנה מהיכן תמשיך לקרוא. ההיסטוריה, הנקודות והרצף לא משתנים.</p>
+        <div class="row">
+          <select id="set-chapter" onchange="setChapterChanged()" style="flex:1"></select>
+          <select id="set-mishnah" style="flex:1"></select>
+          <button onclick="savePosition()">עבור לשם</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>החלפת מסכת</h2>
+        <p class="sub">המסכת הנוכחית תסומן כנטושה. ההתקדמות בה נשמרת ותוצג בלשונית הש״ס.</p>
+        <label for="sw-tractate">מסכת חדשה</label>
+        <select id="sw-tractate" class="full" onchange="swTractateChanged()"></select>
+        <label>מאיפה להתחיל</label>
+        <div class="row">
+          <select id="sw-chapter" onchange="swChapterChanged()" style="flex:1"></select>
+          <select id="sw-mishnah" style="flex:1"></select>
+        </div>
+        <button class="wide" style="margin-top:14px" onclick="switchTractate()">
+          החלף מסכת
+        </button>
+      </div>
+
+      <details class="card">
+        <summary style="font-size:16px">רצף, נקודות וחנות</summary>
+        <div style="padding-top:10px">
+          <div class="kv"><span>רצף נוכחי</span><span id="p-streak">—</span></div>
+          <div class="kv"><span>הרצף הארוך ביותר</span><span id="p-longest">—</span></div>
+          <div class="kv"><span>נקודות</span><span id="p-points">—</span></div>
+          <div class="grid" id="history"></div>
+          <p class="sub" style="margin-top:10px">
+            ירוק = הושלם · אדום = הוחמץ · כחול = הקפאה · סגול = שבת
+          </p>
+          <div id="shop" style="margin-top:12px"></div>
+        </div>
+      </details>
+    </div>
   </section>
 </div>
 
@@ -209,7 +321,8 @@
 <script>
 const API = "/api/v1";
 let token = localStorage.getItem("token") || "";
-let state = null, portion = null;
+let state = null, portion = null, plan = null, tractates = [], tab = "today";
+let browseOrdinal = null, browseMax = 1;
 
 async function api(path, {method="GET", body=null} = {}) {
   const res = await fetch(API + path, {
@@ -233,144 +346,145 @@ function toast(msg){
   const el = document.getElementById("toast");
   el.textContent = msg; el.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(()=>el.classList.remove("show"), 2800);
+  toastTimer = setTimeout(()=>el.classList.remove("show"), 3000);
 }
 function show(screen){
   for (const id of ["login","onboarding","app"])
     document.getElementById("screen-"+id).classList.toggle("hidden", id!==screen);
-  document.getElementById("actions").classList.toggle("hidden", screen!=="app");
+  document.getElementById("actions").classList.toggle("hidden",
+    !(screen === "app" && tab === "today"));
 }
 
-// Sefaria ships light inline markup that carries meaning (the bold dibur
-// hamatchil). The server already stripped everything else, so this builds
-// the node tree by hand rather than trusting innerHTML with remote content.
+// ---------- Hebrew numerals ----------
+const ONES=["","א","ב","ג","ד","ה","ו","ז","ח","ט"];
+const TENS=["","י","כ","ל","מ","נ","ס","ע","פ","צ"];
+const HUNDREDS=["","ק","ר","ש","ת"];
+function gematria(n){
+  if (n <= 0) return String(n);
+  let out = HUNDREDS[Math.floor(n/100)] || "";
+  n %= 100;
+  if (n === 15) out += "טו";              // not יה — that spells the Name
+  else if (n === 16) out += "טז";
+  else { out += TENS[Math.floor(n/10)]; out += ONES[n%10]; }
+  return out.length === 1 ? out + "׳" : out.slice(0,-1) + "״" + out.slice(-1);
+}
+
+// ---------- safe rendering of remote markup ----------
 const INLINE_OK = new Set(["B","I","EM","STRONG","BR","SPAN","BIG","SMALL"]);
 function renderMarkup(target, html){
   target.textContent = "";
   const parsed = new DOMParser().parseFromString("<div>"+html+"</div>", "text/html");
   (function walk(src, dst){
     for (const node of src.childNodes){
-      if (node.nodeType === Node.TEXT_NODE){ dst.appendChild(document.createTextNode(node.data)); }
+      if (node.nodeType === Node.TEXT_NODE) dst.appendChild(document.createTextNode(node.data));
       else if (node.nodeType === Node.ELEMENT_NODE && INLINE_OK.has(node.tagName)){
         const el = document.createElement(node.tagName.toLowerCase());
         walk(node, el); dst.appendChild(el);
-      } else if (node.nodeType === Node.ELEMENT_NODE){ walk(node, dst); }
+      } else if (node.nodeType === Node.ELEMENT_NODE) walk(node, dst);
     }
   })(parsed.body.firstChild, target);
 }
-
-// Mishnah references are cited in Hebrew numerals, never digits. "פרק א,
-// משנה ב" is how a learner reads it; "פרק 1, משנה 2" looks like a spreadsheet.
-const GERESH = "׳", GERSHAYIM = "״";
-const ONES = ["","א","ב","ג","ד","ה","ו","ז","ח","ט"];
-const TENS = ["","י","כ","ל","מ","נ","ס","ע","פ","צ"];
-const HUNDREDS = ["","ק","ר","ש","ת"];
-function gematria(n){
-  if (n <= 0) return String(n);
-  let out = "";
-  out += HUNDREDS[Math.floor(n / 100)] || "";
-  n %= 100;
-  if (n === 15) out += "טו";                 // not יה - that spells the Name
-  else if (n === 16) out += "טז";            // likewise for יו
-  else { out += TENS[Math.floor(n / 10)]; out += ONES[n % 10]; }
-  if (out.length === 1) return out + GERESH;
-  return out.slice(0, -1) + GERSHAYIM + out.slice(-1);
-}
-
 const NIKUD = /[֑-ׇ]/g;
 let nikudOn = localStorage.getItem("nikud") !== "0";
 function toggleNikud(){
   nikudOn = !nikudOn;
   localStorage.setItem("nikud", nikudOn ? "1" : "0");
-  renderPortion();
+  document.getElementById("nikud-btn").textContent = nikudOn ? "אָ" : "א";
+  renderPortion(); if (browseOrdinal) renderBrowse();
 }
 
-function passageHTML(p){
-  const el = document.createElement("div");
-  el.className = "comm-body";
-  if (p.language === "en") el.lang = "en";
-  renderMarkup(el, p.body);
-  if (!nikudOn && p.language !== "en") el.textContent = el.textContent.replace(NIKUD, "");
-  return el;
+function mishnahCard(m, tractateName){
+  const card = document.createElement("article");
+  card.className = "mishnah" + (m.done ? " done" : "");
+  const head = document.createElement("div");
+  head.className = "mishnah-head";
+  const h = document.createElement("h2");
+  h.textContent = `${tractateName} · פרק ${gematria(m.chapter)}, משנה ${gematria(m.number)}`;
+  head.appendChild(h);
+  if (m.done){
+    const t = document.createElement("span");
+    t.className = "tick"; t.textContent = "✓ נלמדה";
+    head.appendChild(t);
+  }
+  card.appendChild(head);
+
+  if (m.text){
+    const body = document.createElement("div");
+    body.className = "text";
+    renderMarkup(body, m.text.body);
+    if (!nikudOn) body.textContent = body.textContent.replace(NIKUD, "");
+    card.appendChild(body);
+    const src = document.createElement("div");
+    src.className = "srcline";
+    const a = document.createElement("a");
+    a.href = m.text.url; a.target = "_blank"; a.rel = "noopener"; a.textContent = "Sefaria";
+    src.append(document.createTextNode(`${m.text.version||""} · ${m.text.license||""} · `), a);
+    card.appendChild(src);
+  } else {
+    const w = document.createElement("p");
+    w.className = "sub"; w.textContent = "הטקסט אינו זמין כרגע — בדוק את החיבור לאינטרנט.";
+    card.appendChild(w);
+  }
+
+  if (m.commentaries?.length){
+    const comm = document.createElement("div");
+    comm.className = "comm";
+    m.commentaries.forEach((c,i) => {
+      const d = document.createElement("details");
+      if (i === 0) d.open = true;
+      const s = document.createElement("summary");
+      s.appendChild(document.createTextNode(c.title));
+      const lic = document.createElement("span");
+      lic.className = "lic"; lic.textContent = [c.note,c.license].filter(Boolean).join(" · ");
+      s.appendChild(lic); d.appendChild(s);
+      const body = document.createElement("div");
+      body.className = "comm-body";
+      if (c.language === "en") body.lang = "en";
+      renderMarkup(body, c.body);
+      if (!nikudOn && c.language !== "en") body.textContent = body.textContent.replace(NIKUD,"");
+      d.appendChild(body); comm.appendChild(d);
+    });
+    card.appendChild(comm);
+  }
+  return card;
 }
 
 function renderPortion(){
   const host = document.getElementById("portion");
   host.textContent = "";
   if (!portion) return;
-
-  for (const m of portion.mishnayot){
-    const card = document.createElement("article");
-    card.className = "mishnah" + (m.done ? " done" : "");
-
-    const head = document.createElement("div");
-    head.className = "mishnah-head";
-    const h = document.createElement("h2");
-    h.textContent = `${portion.tractate} · פרק ${gematria(m.chapter)}, משנה ${gematria(m.number)}`;
-    head.appendChild(h);
-    if (m.done){
-      const tick = document.createElement("span");
-      tick.className = "tick"; tick.textContent = "✓ נלמדה";
-      head.appendChild(tick);
-    }
-    card.appendChild(head);
-
-    if (m.text){
-      const body = document.createElement("div");
-      body.className = "text";
-      renderMarkup(body, m.text.body);
-      if (!nikudOn) body.textContent = body.textContent.replace(NIKUD, "");
-      card.appendChild(body);
-
-      const src = document.createElement("div");
-      src.className = "srcline";
-      const a = document.createElement("a");
-      a.href = m.text.url; a.target = "_blank"; a.rel = "noopener";
-      a.textContent = "Sefaria";
-      src.append(document.createTextNode(`${m.text.version || ""} · ${m.text.license || ""} · `), a);
-      card.appendChild(src);
-    } else {
-      const warn = document.createElement("p");
-      warn.className = "sub";
-      warn.textContent = "הטקסט אינו זמין כרגע — נסה שוב מאוחר יותר.";
-      card.appendChild(warn);
-    }
-
-    if (m.commentaries.length){
-      const comm = document.createElement("div");
-      comm.className = "comm";
-      m.commentaries.forEach((c, i) => {
-        const d = document.createElement("details");
-        if (i === 0) d.open = true;              // Bartenura open by default
-        const s = document.createElement("summary");
-        s.appendChild(document.createTextNode(c.title));
-        const lic = document.createElement("span");
-        lic.className = "lic";
-        lic.textContent = [c.note, c.license].filter(Boolean).join(" · ");
-        s.appendChild(lic);
-        d.appendChild(s);
-        d.appendChild(passageHTML(c));
-        comm.appendChild(d);
-      });
-      card.appendChild(comm);
-    }
-    host.appendChild(card);
-  }
+  for (const m of portion.mishnayot) host.appendChild(mishnahCard(m, portion.tractate));
 }
 
+// ---------- tabs ----------
+function switchTab(name){
+  tab = name;
+  for (const t of ["today","browse","shas","settings"]){
+    document.getElementById("pane-"+t).classList.toggle("hidden", t!==name);
+    document.getElementById("tab-"+t).classList.toggle("on", t===name);
+  }
+  document.getElementById("actions").classList.toggle("hidden", name!=="today");
+  window.scrollTo({top:0});
+  if (name === "shas") loadShas();
+  if (name === "browse" && !browseOrdinal) browseStart();
+  if (name === "settings") loadSettings();
+}
+
+// ---------- boot ----------
 async function boot(){
   await tick();
   try { state = await api("/study/today"); }
   catch (err){
-    if (err.code === "no_active_plan"){ await loadTractates(); show("onboarding"); return; }
+    if (err.code === "no_active_plan"){ await startOnboarding(); return; }
     if (err.status === 401){ localStorage.removeItem("token"); token=""; show("login"); return; }
     toast("שגיאה: " + err.message); throw err;
   }
+  plan = await api("/plans/current");
   show("app");
   renderStrip();
   portion = await api("/study/portion");
   renderPortion();
-  await Promise.all([loadHistory(), loadShop()]);
+  loadHistory(); loadShop();
 }
 
 const DAY_NAMES = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
@@ -379,48 +493,263 @@ function renderStrip(){
   const s = state;
   document.getElementById("streak").textContent = s.current_streak;
   document.getElementById("points").textContent = s.total_points;
+  document.getElementById("nikud-btn").textContent = nikudOn ? "אָ" : "א";
   const d = new Date(s.local_date + "T00:00:00");
   document.getElementById("where").textContent =
-    `יום ${DAY_NAMES[d.getDay()]} · ${s.completed_units}/${s.required_units}` +
-    (s.is_double_portion ? " · מנה כפולה" : "");
+    `${s.progress.tractate} · יום ${DAY_NAMES[d.getDay()]}`;
 
   const b = [];
   if (s.penalties_frozen)
-    b.push(`<div class="banner shabbat"><b>🕯️ מצב שבת</b>העונשים מוקפאים — לא תאבד רצף ולא נקודות.</div>`);
+    b.push(`<div class="banner shabbat"><b>🕯️ מצב שבת פעיל</b>העונשים מוקפאים — לא תאבד רצף ולא נקודות.</div>`);
   else if (s.is_double_portion)
-    b.push(`<div class="banner freeze"><b>📖 מנה כפולה</b>${s.required_units} משניות — של שישי ושל שבת.</div>`);
+    b.push(`<div class="banner freeze"><b>📖 מנה כפולה</b>${s.required_units} משניות היום — של שישי ושל שבת יחד.</div>`);
   if (s.can_report_shabbat)
-    b.push(`<div class="banner shabbat"><b>🌙 מוצאי שבת</b>דווח על הלימוד כדי לקבל את הנקודות.</div>`);
+    b.push(`<div class="banner shabbat"><b>🌙 מוצאי שבת</b>דווח על הלימוד כדי לקבל את הנקודות של שישי ושבת.</div>`);
   document.getElementById("banners").innerHTML = b.join("");
-
   document.getElementById("shabbat-report").classList.toggle("hidden", !s.can_report_shabbat);
-  const done = s.required_units > 0 && s.completed_units >= s.required_units;
+
+  const left = s.required_units - s.completed_units;
+  const done = s.required_units > 0 && left <= 0;
+  const hint = document.getElementById("today-hint");
+  if (s.required_units === 0){
+    hint.innerHTML = `<b>אין מכסה היום</b><span class="step">המנה של היום כבר נלמדה ביום שישי.</span>`;
+  } else if (done){
+    hint.innerHTML = `<b>✓ סיימת את המכסה של היום</b><span class="step">הרצף שלך: ${s.current_streak} ימים. נתראה מחר.</span>`;
+  } else {
+    hint.innerHTML = `<b>קרא את ${left} המשניות שלמטה</b>` +
+      `<span class="step">כל משנה מופיעה עם הפירושים — לחץ על שם פירוש כדי לפתוח אותו. ` +
+      `בסיום לחץ על הכפתור בתחתית המסך.</span>`;
+  }
+
   const btn = document.getElementById("btn-done");
   btn.disabled = done || s.required_units === 0;
-  btn.textContent = done ? "✓ סיימת להיום" :
-    s.required_units === 0 ? "אין מכסה היום" :
-    `סיימתי ללמוד (${s.points_if_completed} נק׳)`;
+  btn.textContent = done ? "✓ סיימת להיום"
+    : s.required_units === 0 ? "אין מה ללמוד היום"
+    : `סיימתי לקרוא ${left} משניות · +${s.points_if_completed} נק׳`;
 
-  document.getElementById("p-done").textContent = `${s.progress.completed} / ${s.progress.total}`;
-  document.getElementById("p-eta").textContent = s.progress.estimated_end_date || "—";
+  document.getElementById("p-streak").textContent = s.current_streak;
   document.getElementById("p-longest").textContent = s.longest_streak;
   document.getElementById("p-points").textContent = s.total_points;
 }
 
 async function markDone(){
-  const remaining = state.required_units - state.completed_units;
-  if (remaining <= 0) return;
-  const r = await api("/study/log", {method:"POST", body:{units:remaining}});
-  toast(r.day_completed ? `יישר כוח! +${r.points_awarded} נק׳` : "נרשם");
+  const left = state.required_units - state.completed_units;
+  if (left <= 0) return;
+  const r = await api("/study/log", {method:"POST", body:{units:left}});
+  toast(r.day_completed ? `יישר כוח! +${r.points_awarded} נק׳ · רצף ${r.streak}` : "נרשם");
   await boot();
 }
-
 async function reportShabbat(){
   const r = await api("/study/shabbat-report", {method:"POST", body:{completed:true}});
   toast(`+${r.friday_points + r.shabbat_points + r.motash_bonus} נק׳`);
   await boot();
 }
 
+// ---------- browse ----------
+function fillChapters(sel, chapters){
+  sel.innerHTML = chapters.map(c =>
+    `<option value="${c.chapter}">פרק ${gematria(c.chapter)}</option>`).join("");
+}
+function fillMishnayot(sel, chapters, chapterNo){
+  const c = chapters.find(x => x.chapter === Number(chapterNo)) || chapters[0];
+  sel.innerHTML = Array.from({length:c.mishnayot}, (_,i) =>
+    `<option value="${i+1}">משנה ${gematria(i+1)}</option>`).join("");
+}
+function ordinalOf(chapters, ch, mi){
+  const c = chapters.find(x => x.chapter === Number(ch));
+  return c ? c.first_ordinal + Number(mi) - 1 : 1;
+}
+
+function browseStart(){
+  fillChapters(document.getElementById("br-chapter"), plan.chapters);
+  document.getElementById("br-chapter").value = plan.next_chapter || 1;
+  brChapterChanged();
+}
+function brChapterChanged(){
+  const ch = document.getElementById("br-chapter").value;
+  fillMishnayot(document.getElementById("br-mishnah"), plan.chapters, ch);
+  browseGo();
+}
+async function browseGo(){
+  const ch = document.getElementById("br-chapter").value;
+  const mi = document.getElementById("br-mishnah").value;
+  browseOrdinal = ordinalOf(plan.chapters, ch, mi);
+  await renderBrowse();
+}
+async function browseStep(delta){
+  const next = (browseOrdinal || 1) + delta;
+  if (next < 1 || next > plan.total) return;
+  browseOrdinal = next;
+  await renderBrowse(true);
+}
+async function renderBrowse(syncSelects){
+  const host = document.getElementById("browse-view");
+  host.innerHTML = `<div class="spinner">טוען…</div>`;
+  let m;
+  try { m = await api(`/study/mishnah/${browseOrdinal}`); }
+  catch { host.innerHTML = `<div class="card"><p class="sub">לא נמצאה משנה.</p></div>`; return; }
+  browseMax = m.total;
+  if (syncSelects){
+    document.getElementById("br-chapter").value = m.chapter;
+    fillMishnayot(document.getElementById("br-mishnah"), plan.chapters, m.chapter);
+    document.getElementById("br-mishnah").value = m.number;
+  }
+  document.getElementById("br-prev").disabled = browseOrdinal <= 1;
+  document.getElementById("br-next").disabled = browseOrdinal >= m.total;
+  host.textContent = "";
+  host.appendChild(mishnahCard(m, plan.tractate));
+}
+
+// ---------- shas ----------
+async function loadShas(){
+  const data = await api("/shas");
+  const pct = Math.round(data.learned / data.total * 100);
+  document.getElementById("shas-summary").innerHTML =
+    `<b>הש״ס כולו</b><span class="step">${data.learned.toLocaleString("he-IL")} מתוך ` +
+    `${data.total.toLocaleString("he-IL")} משניות (${pct}%) · ` +
+    `${data.tractates_complete} מסכתות הושלמו</span>`;
+
+  const host = document.getElementById("shas-list");
+  host.textContent = "";
+  for (const seder of data.sedarim){
+    const wrap = document.createElement("div");
+    wrap.className = "card seder";
+    const h = document.createElement("h3");
+    h.innerHTML = `סדר ${seder.name_he} <small>${seder.learned}/${seder.total}</small>`;
+    wrap.appendChild(h);
+    for (const t of seder.tractates){
+      const row = document.createElement("div");
+      row.className = "trac" + (t.is_complete ? " done" : "");
+      const p = t.total ? Math.round(t.learned / t.total * 100) : 0;
+      row.innerHTML =
+        `<span class="nm">${t.name_he}${t.is_active?'<span class="badge">נוכחית</span>':""}` +
+        `${t.is_complete?" ✓":""}</span>` +
+        `<span class="bar"><i style="width:${p}%"></i></span>` +
+        `<span class="cnt">${t.learned}/${t.total}</span>`;
+      wrap.appendChild(row);
+    }
+    host.appendChild(wrap);
+  }
+}
+
+// ---------- settings ----------
+const GOALS = [1,2,3,4,5,6,8,10,15,20];
+function loadSettings(){
+  document.getElementById("set-current").textContent =
+    `${plan.tractate} — ${plan.completed} מתוך ${plan.total} משניות נלמדו`;
+  document.getElementById("set-eta").textContent = plan.estimated_end_date || "—";
+
+  const g = document.getElementById("set-goal");
+  g.innerHTML = GOALS.map(n => `<option value="${n}">${n} ביום</option>`).join("");
+  g.value = plan.daily_goal;
+  setPreview();
+
+  fillChapters(document.getElementById("set-chapter"), plan.chapters);
+  document.getElementById("set-chapter").value = plan.next_chapter || 1;
+  setChapterChanged();
+
+  const sw = document.getElementById("sw-tractate");
+  sw.innerHTML = tractates.map(t =>
+    `<option value="${t.slug}">${t.name_he} — ${t.mishnayot} משניות</option>`).join("");
+  swTractateChanged();
+}
+function setPreview(){
+  const goal = Number(document.getElementById("set-goal").value);
+  const left = plan.total - plan.completed;
+  document.getElementById("set-goal-preview").textContent =
+    `נותרו ${left} משניות — בקצב הזה, כ־${Math.ceil(left/goal)} ימי לימוד.`;
+}
+function setChapterChanged(){
+  fillMishnayot(document.getElementById("set-mishnah"), plan.chapters,
+                document.getElementById("set-chapter").value);
+}
+async function saveGoal(){
+  const r = await api("/plans/current", {method:"PUT",
+    body:{daily_goal: Number(document.getElementById("set-goal").value)}});
+  toast(`היעד עודכן · סיום משוער ${r.estimated_end_date}`);
+  await boot(); loadSettings();
+}
+async function savePosition(){
+  const ch = Number(document.getElementById("set-chapter").value);
+  const mi = Number(document.getElementById("set-mishnah").value);
+  if (!confirm(`לעבור לפרק ${gematria(ch)} משנה ${gematria(mi)}?\nהנקודות והרצף לא ישתנו.`)) return;
+  const r = await api("/plans/current", {method:"PUT",
+    body:{start_chapter: ch, start_mishnah: mi}});
+  toast(`עברת לפרק ${gematria(ch)} משנה ${gematria(mi)}`);
+  await boot(); loadSettings();
+}
+async function swTractateChanged(){
+  const slug = document.getElementById("sw-tractate").value;
+  const s = await api(`/tractates/${slug}/structure`);
+  document.getElementById("sw-tractate").dataset.chapters = JSON.stringify(s.chapters);
+  fillChapters(document.getElementById("sw-chapter"), s.chapters);
+  swChapterChanged();
+}
+function swChapterChanged(){
+  const chapters = JSON.parse(document.getElementById("sw-tractate").dataset.chapters);
+  fillMishnayot(document.getElementById("sw-mishnah"), chapters,
+                document.getElementById("sw-chapter").value);
+}
+async function switchTractate(){
+  const slug = document.getElementById("sw-tractate").value;
+  const name = document.getElementById("sw-tractate").selectedOptions[0].textContent;
+  if (!confirm(`להחליף ל${name}?\nהמסכת הנוכחית (${plan.tractate}) תסומן כנטושה, וההתקדמות בה תישמר.`)) return;
+  const r = await api("/plans/switch", {method:"POST", body:{
+    tractate_slug: slug,
+    daily_goal: Number(document.getElementById("set-goal").value || plan.daily_goal),
+    start_chapter: Number(document.getElementById("sw-chapter").value),
+    start_mishnah: Number(document.getElementById("sw-mishnah").value)}});
+  toast(`עברת ל${r.tractate} · סיום משוער ${r.estimated_end_date}`);
+  browseOrdinal = null;
+  await boot(); switchTab("today");
+}
+
+// ---------- onboarding ----------
+async function startOnboarding(){
+  tractates = await api("/tractates");
+  document.getElementById("ob-tractate").innerHTML = tractates.map(t =>
+    `<option value="${t.slug}">${t.name_he} — ${t.mishnayot} משניות</option>`).join("");
+  await obTractateChanged();
+  show("onboarding");
+}
+async function obTractateChanged(){
+  const slug = document.getElementById("ob-tractate").value;
+  const s = await api(`/tractates/${slug}/structure`);
+  document.getElementById("ob-tractate").dataset.chapters = JSON.stringify(s.chapters);
+  document.getElementById("ob-tractate").dataset.total = s.mishnayot;
+  fillChapters(document.getElementById("ob-chapter"), s.chapters);
+  obChapterChanged();
+}
+function obChapterChanged(){
+  const chapters = JSON.parse(document.getElementById("ob-tractate").dataset.chapters);
+  fillMishnayot(document.getElementById("ob-mishnah"), chapters,
+                document.getElementById("ob-chapter").value);
+  obPreview();
+}
+function obPreview(){
+  const el = document.getElementById("ob-tractate");
+  const chapters = JSON.parse(el.dataset.chapters || "[]");
+  const total = Number(el.dataset.total || 0);
+  const start = ordinalOf(chapters, document.getElementById("ob-chapter").value,
+                          document.getElementById("ob-mishnah").value);
+  const goal = Number(document.getElementById("ob-goal").value);
+  const left = total - start + 1;
+  document.getElementById("ob-preview").innerHTML =
+    `<b>${left} משניות ללמוד</b><span class="step">בקצב ${goal} ביום — כ־${Math.ceil(left/goal)} ימי לימוד.</span>`;
+}
+async function createPlan(){
+  const slug = document.getElementById("ob-tractate").value;
+  const goal = Number(document.getElementById("ob-goal").value);
+  await api("/plans", {method:"POST", body:{tractate_slug:slug, daily_goal:goal}});
+  const ch = Number(document.getElementById("ob-chapter").value);
+  const mi = Number(document.getElementById("ob-mishnah").value);
+  if (ch !== 1 || mi !== 1)
+    await api("/plans/current", {method:"PUT", body:{start_chapter:ch, start_mishnah:mi}});
+  await boot();
+  toast("בהצלחה! המשניות של היום מוכנות.");
+}
+
+// ---------- misc ----------
 async function loadHistory(){
   const since = new Date(state.local_date);
   since.setDate(since.getDate() - 27);
@@ -429,35 +758,24 @@ async function loadHistory(){
     `<div class="day ${r.status}" title="${r.date} · ${r.points} נק׳">${new Date(r.date+"T00:00:00").getDate()}</div>`
   ).join("");
 }
-
 async function loadShop(){
   const items = await api("/shop/items");
   document.getElementById("shop").innerHTML = items.map(i => `
-    <div class="kv"><span>${i.name} (${i.owned}/${i.max_owned})</span>
-    <span><button ${state.total_points<i.cost||i.owned>=i.max_owned?"disabled":""}
-      onclick="buy('${i.sku}')">${i.cost} נק׳</button></span></div>`).join("");
+    <div class="kv"><span>${i.name}<br><small style="color:var(--muted);font-weight:400">${i.description||""}</small></span>
+    <span><button class="small" ${state.total_points<i.cost||i.owned>=i.max_owned?"disabled":""}
+      onclick="buy('${i.sku}')">קנה · ${i.cost} נק׳</button>
+      <div style="font-size:11px;color:var(--muted);font-weight:400;margin-top:4px">ברשותך ${i.owned}/${i.max_owned}</div></span></div>`).join("");
 }
-async function buy(sku){ const r = await api("/shop/purchase",{method:"POST",body:{sku}});
-  toast(`נרכש — נותרו ${r.balance}`); await boot(); }
-
+async function buy(sku){
+  const r = await api("/shop/purchase",{method:"POST",body:{sku}});
+  toast(`נרכש — נותרו ${r.balance} נק׳`); await boot(); loadShop();
+}
 async function devLogin(){
   const d = await api("/dev/login", {method:"POST", body:{
     email: document.getElementById("email").value,
     observes_shabbat: document.getElementById("shabbat-mode").value === "1"}});
   token = d.access_token; localStorage.setItem("token", token); await boot();
 }
-async function loadTractates(){
-  const list = await api("/tractates");
-  document.getElementById("tractate").innerHTML =
-    list.map(t=>`<option value="${t.slug}">${t.name_he} — ${t.mishnayot} משניות</option>`).join("");
-}
-async function createPlan(){
-  const d = await api("/plans", {method:"POST", body:{
-    tractate_slug: document.getElementById("tractate").value,
-    daily_goal: Number(document.getElementById("goal").value)}});
-  toast(`סיום משוער: ${d.estimated_end_date}`); await boot();
-}
-
 async function tick(){
   const t = await api("/dev/time");
   document.getElementById("clock").textContent =
@@ -465,10 +783,14 @@ async function tick(){
       {weekday:"short",day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
 }
 async function shift(delta){ await api("/dev/time",{method:"POST",body:delta}); await boot(); }
-async function grant(){ await api("/dev/grant",{method:"POST",body:{points:200}}); await boot(); }
-async function resetAll(){ await api("/dev/reset",{method:"POST"}); toast("אופס"); await boot(); }
+async function grant(){ await api("/dev/grant",{method:"POST",body:{points:200}}); await boot(); loadShop(); }
+async function resetAll(){
+  await api("/dev/reset",{method:"POST"});
+  browseOrdinal = null; toast("אופס"); await boot();
+}
 
 (async () => {
+  try { tractates = await api("/tractates"); } catch {}
   if (!token){ show("login"); await tick(); return; }
   try { await boot(); } catch { show("login"); }
 })();

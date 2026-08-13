@@ -30,12 +30,35 @@ and a Shabbat freeze are otherwise only observable by waiting a week. It is
 gated behind `dev_mode` and 404s when that is off.
 
 **SQLite is for development only.** It has no row locks, so the concurrency
-guarantees in §6 are unenforced there. Point `DATABASE_URL` at PostgreSQL for
+guarantees in §7 are unenforced there. Point `DATABASE_URL` at PostgreSQL for
 anything real.
 
 ---
 
-## 1. The text layer (`services/texts.py`)
+## 1. Screens
+
+Four tabs, because the app does four distinct things:
+
+- **היום** — today's mishnayot with their commentaries, and one button that
+  says exactly what it does (`סיימתי לקרוא 3 משניות · +10 נק׳`). A hint line
+  above states the task in words; when the day is done it says so instead.
+- **עיון** — free navigation: chapter and mishnah pickers in Hebrew numerals,
+  prev/next arrows that disable at the ends. Reading here is explicitly *not*
+  logged, and the screen says so — otherwise browsing would silently feel like
+  it should count.
+- **הש״ס** — all 63 tractates grouped by seder with a progress bar each.
+  Progress is the furthest cursor across *all* plans for that tractate, so a
+  tractate abandoned half-way still shows what was learned.
+- **הגדרות** — change the daily goal, jump to any chapter:mishnah, or switch
+  tractate. Each destructive action confirms first and states the consequence.
+
+A goal change applies to today when the day is still open, and never to a day
+already resolved — re-scoring a finished day would hand out or revoke a streak
+someone already earned.
+
+---
+
+## 2. The text layer (`services/texts.py`)
 
 The part people come for. Sourced from Sefaria's public API and cached
 permanently in `text_cache`.
@@ -77,7 +100,7 @@ Hebrew numerals are computed client-side for references — פרק א׳, משנ�
 
 ---
 
-## 2. The three problems worth designing around
+## 3. The three problems worth designing around
 
 Most of this app is CRUD. Three things are not, and the whole structure follows
 from them.
@@ -102,7 +125,7 @@ happily punish observant users at 03:00 Saturday.
 
 ---
 
-## 3. Schema
+## 4. Schema
 
 ```mermaid
 erDiagram
@@ -156,7 +179,7 @@ even across a chapter boundary.
 
 ---
 
-## 4. Scoring (`services/scoring.py` — pure, no I/O)
+## 5. Scoring (`services/scoring.py` — pure, no I/O)
 
 ```
 points = base_points × multiplier(streak_after_this_day)
@@ -184,7 +207,7 @@ settlement engine when a day would otherwise be `MISSED` — no pre-arming, no
 
 ---
 
-## 5. Sabbath Mode
+## 6. Sabbath Mode
 
 ### The week
 
@@ -238,7 +261,7 @@ HaMoed — verified against Rosh Hashana 5787 and Pesach 5786.
 
 ---
 
-## 6. Settlement — the one function that moves the economy
+## 7. Settlement — the one function that moves the economy
 
 `services/settlement.py :: settle_user(session, user, now)`
 
@@ -282,7 +305,7 @@ ledger and `study_events`.
 
 ---
 
-## 7. Auth
+## 8. Auth
 
 Google **Authorization Code + PKCE**. The code is exchanged server-side so the
 client secret never reaches the browser, and the returned `id_token` is
@@ -299,7 +322,7 @@ revokes the whole chain for that user.
 
 ---
 
-## 8. API
+## 9. API
 
 | Method | Path | Notes |
 |---|---|---|
@@ -309,6 +332,11 @@ revokes the whole chain for that user.
 | `GET` | `/tractates` | onboarding picker |
 | `POST` | `/plans` | tractate + daily goal → **estimated completion date** |
 | `GET` | `/study/today` | progress + streak state; settles first |
+| `GET` | `/plans/current` | current plan + chapter structure |
+| `PUT` | `/plans/current` | change the daily goal, or jump to a chapter:mishnah |
+| `POST` | `/plans/switch` | abandon this tractate and start another |
+| `GET` | `/tractates/{slug}/structure` | per-chapter mishnah counts, for the pickers |
+| `GET` | `/shas` | all 63 tractates with per-tractate progress |
 | `GET` | `/study/portion` | **today's mishnayot with text and commentaries** |
 | `GET` | `/study/mishnah/{ordinal}` | any mishnah in the tractate, for review |
 | `POST` | `/study/log` | `Idempotency-Key` header |
@@ -322,7 +350,7 @@ in the HTTP layer, which is why the rules are testable without an app.
 
 ---
 
-## 9. Completion estimate
+## 10. Completion estimate
 
 A calendar **walk**, not `ceil(remaining / goal)` — division gets Shabbat wrong,
 since Friday carries double and Shabbat carries none. Walking also makes
@@ -334,19 +362,21 @@ Friday's own half, it stays Friday.
 
 ---
 
-## 10. Status
+## 11. Status
 
 ```bash
 .venv/Scripts/python.exe -m pytest tests/ -q
 ```
 
-**56 passing.** `tests/test_rules.py` covers the pure rules with no database
+**62 passing.** `tests/test_rules.py` covers the pure rules with no database
 (multiplier curve, penalty clamping, day boundaries across timezones,
 double-portion quota, freeze-window containment, report deadlines, completion
 estimates, candle-lighting custom). `tests/test_settlement.py` drives the
 engine against a real database — SQLite by default, PostgreSQL via
 `TEST_DATABASE_URL`. `tests/test_texts.py` covers sanitisation and ref
-construction without touching the network.
+construction without touching the network, and `tests/test_portion.py` pins
+down which mishnayot make up a day — every case in it is a bug that reached
+the running app first.
 
 The models emit correct DDL on both dialects, including partial indexes
 (`WHERE status = 'active'`, `WHERE status IN ('pending','shabbat_pending')`).
@@ -387,6 +417,20 @@ Worth recording, because each one was invisible until something actually ran:
    to the project root.
 5. **Partial indexes were partial only on PostgreSQL.** Without `sqlite_where`,
    "one ACTIVE plan per user" became "one plan per user, ever" on SQLite.
+6. **Network I/O inside a write transaction.** `/study/portion` ran settlement
+   (a write) and then made up to sixteen Sefaria round trips with that
+   transaction still open. On SQLite that holds a write lock for seconds, and
+   every concurrent write in the process failed with "database is locked".
+   Fixed by committing the business work first and giving the text cache its
+   own short transactions.
+7. **SQLite's defaults are wrong for a web app** in three separate ways:
+   `busy_timeout=0` fails instantly instead of waiting, `journal_mode=DELETE`
+   makes readers block writers, and foreign keys are *not enforced* unless you
+   ask — so every `ON DELETE CASCADE` in the schema was inert. All three are
+   now set on connect.
+8. **The portion anchor counted the wrong plan's units.** Switching tractate
+   mid-day rewound the new tractate by however many mishnayot had been learned
+   in the old one — switching to Megillah 2:1 displayed Megillah 1:10.
 
 ### Not built yet
 

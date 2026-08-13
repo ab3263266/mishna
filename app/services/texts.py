@@ -165,6 +165,10 @@ def load_passage(
     if not allow_network:
         return None
 
+    # The network call happens with no transaction open. Fetching inside one
+    # would hold a write lock for the length of an HTTP round trip - and
+    # assembling a mishnah makes eight of them, which is long enough to make
+    # every concurrent write in the process fail.
     payload = _fetch_from_sefaria(ref)
     if payload is None:
         return None
@@ -186,9 +190,37 @@ def load_passage(
         license=version.get("license"),
         version_title=version.get("versionTitle"),
     )
-    session.merge(row)
-    session.flush()
+    _store(row)
     return _passage_from_cache(row, kind)
+
+
+def _store(row: TextCache) -> None:
+    """Persist one cached passage in its own short transaction.
+
+    Deliberately *not* the caller's session. The cache is independent of
+    whatever business transaction is in flight: a study log should not be able
+    to roll back a text we already fetched, and warming the cache must never
+    hold a lock that a real write is waiting behind. Failure here is silent by
+    design - an uncached passage is a slower screen, not a broken one.
+    """
+    from app.db.session import SessionLocal
+
+    try:
+        with SessionLocal() as write_session:
+            write_session.merge(
+                TextCache(
+                    ref=row.ref,
+                    kind=row.kind,
+                    he_ref=row.he_ref,
+                    language=row.language,
+                    body=row.body,
+                    license=row.license,
+                    version_title=row.version_title,
+                )
+            )
+            write_session.commit()
+    except Exception:
+        logger.warning("could not cache %s/%s", row.ref, row.kind, exc_info=True)
 
 
 def _passage_from_cache(row: TextCache, kind: str) -> Passage:
@@ -281,7 +313,8 @@ def prefetch(session: Session, tractate: Tractate, ordinals: list[int]) -> int:
             if get_mishnah(session, tractate, ordinal) is not None:
                 warmed += 1
         except Exception:  # pragma: no cover - best effort by design
-            logger.exception("prefetch failed for %s %s", tractate.slug, ordinal)
+            session.rollback()
+            logger.warning("prefetch skipped %s %s", tractate.slug, ordinal)
     return warmed
 
 

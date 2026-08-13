@@ -166,12 +166,28 @@ def change_goal(
 ) -> Projection:
     """Re-project from *today* with the remaining units.
 
-    Note the deliberate gap: already-created future day rows keep their old
-    `required_units`. Rewriting history when someone lowers their goal is how
-    you accidentally hand out a retroactive streak.
+    Today's quota is updated too, but only while the day is still open. A day
+    that has already been resolved keeps the requirement it was judged
+    against — re-scoring a finished day is how you accidentally hand out (or
+    revoke) a streak someone already earned.
     """
+    from app.models import DayStatus, StudyDay
+    from app.services.calendar import required_units_for
+
     tractate = session.get(Tractate, plan.tractate_id)
     plan.daily_goal = new_goal
+
+    open_today = session.execute(
+        select(StudyDay).where(
+            StudyDay.user_id == user.id,
+            StudyDay.local_date == today,
+            StudyDay.status.in_([DayStatus.PENDING, DayStatus.SHABBAT_PENDING]),
+        )
+    ).scalar_one_or_none()
+    if open_today is not None:
+        open_today.required_units = required_units_for(
+            open_today.day_kind, new_goal
+        )
     projection = project_completion(
         remaining_units=tractate.mishnayot_count - plan.current_ordinal,
         daily_goal=new_goal,
@@ -182,3 +198,94 @@ def change_goal(
     )
     plan.estimated_end_date = projection.estimated_end_date
     return projection
+
+
+def set_position(
+    session: Session, plan: StudyPlan, *, chapter: int, mishnah: int
+) -> int:
+    """Move the reading cursor to a specific chapter:mishnah.
+
+    This changes *where you are reading*, not what you have been credited for.
+    Day rows, points and streaks are untouched — someone who starts Berakhot at
+    chapter 4 has not retroactively earned the first three chapters, and
+    rewriting the ledger to pretend otherwise would corrupt the one table the
+    whole economy trusts.
+    """
+    from app.models import Mishnah
+
+    target = session.execute(
+        select(Mishnah).where(
+            Mishnah.tractate_id == plan.tractate_id,
+            Mishnah.chapter == chapter,
+            Mishnah.number == mishnah,
+        )
+    ).scalar_one_or_none()
+    if target is None:
+        raise StudyError(
+            "no_such_mishnah", f"פרק {chapter} משנה {mishnah} לא קיימת במסכת", 404
+        )
+
+    # current_ordinal is "how many are behind me", so landing *on* a mishnah
+    # means the cursor sits one before it.
+    plan.current_ordinal = target.ordinal - 1
+    return target.ordinal
+
+
+def switch_tractate(
+    session: Session,
+    user: User,
+    plan: StudyPlan | None,
+    *,
+    tractate_slug: str,
+    daily_goal: int,
+    start_chapter: int = 1,
+    start_mishnah: int = 1,
+    now: datetime | None = None,
+) -> tuple[StudyPlan, Projection]:
+    """Abandon the current plan and start a new one.
+
+    The old plan is marked ABANDONED rather than deleted: its study_days and
+    ledger entries still reference it, and the streak the user built while on
+    it is real history.
+    """
+    now = now or clock.now()
+    if plan is not None:
+        plan.status = PlanStatus.ABANDONED
+        session.flush()
+
+    new_plan, projection = create_plan(
+        session,
+        user,
+        tractate_slug=tractate_slug,
+        daily_goal=daily_goal,
+        now=now,
+    )
+    if (start_chapter, start_mishnah) != (1, 1):
+        set_position(session, new_plan, chapter=start_chapter, mishnah=start_mishnah)
+
+    # Re-project from the real position, and let today's open row pick up the
+    # new goal so the switch takes effect immediately rather than tomorrow.
+    projection = change_goal(session, user, new_plan, daily_goal, now.date())
+    return new_plan, projection
+
+
+def chapter_structure(session: Session, tractate: Tractate) -> list[dict]:
+    """[{chapter, mishnayot, first_ordinal}] — drives the chapter picker."""
+    from sqlalchemy import func as sa_func
+
+    from app.models import Mishnah
+
+    rows = session.execute(
+        select(
+            Mishnah.chapter,
+            sa_func.count(Mishnah.id),
+            sa_func.min(Mishnah.ordinal),
+        )
+        .where(Mishnah.tractate_id == tractate.id)
+        .group_by(Mishnah.chapter)
+        .order_by(Mishnah.chapter)
+    ).all()
+    return [
+        {"chapter": c, "mishnayot": n, "first_ordinal": first}
+        for c, n, first in rows
+    ]

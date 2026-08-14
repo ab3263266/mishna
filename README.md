@@ -37,8 +37,52 @@ anything real.
 
 ## Deploying
 
-A Python process, a PostgreSQL database, and nothing else. A static host like
-Netlify cannot run it.
+### What the host has to provide
+
+| Requirement | Where it comes from |
+|---|---|
+| A long-lived Python 3.12+ ASGI process | the whole backend; `uvicorn app.main:app` |
+| PostgreSQL with real transactions | `ledger.lock_stats` takes `SELECT … FOR UPDATE`; it is the only thing preventing two concurrent requests from both advancing the same streak |
+| The process to stay alive **after** a response is sent | `routes.study_portion` returns, then a `BackgroundTasks` job warms the next portion's texts |
+| A connection pool held between requests | `db/session.py` — `pool_size=10, max_overflow=20` |
+| Outbound HTTPS | Sefaria for texts, Google for token exchange and JWKS |
+| Server-side secrets | the OAuth client secret and `JWT_SECRET` must never reach the browser |
+| Ability to set cookies on a redirect | the Google callback sets an HttpOnly refresh cookie, then redirects |
+| HTTPS on a stable domain | `Secure` cookies, and Google validates the exact redirect URI |
+| ~512 MB RAM | FastAPI + SQLAlchemy + the zmanim/pyluach libraries |
+
+No persistent disk is needed — all state is in Postgres, and the text cache is
+a database table.
+
+### Why not Netlify
+
+Netlify runs a static CDN plus short-lived serverless functions. Four things
+rule it out, the first on its own:
+
+1. **Python is not a Netlify Functions runtime.** The official configuration
+   reference documents exactly three: TypeScript, JavaScript and Go. (Blog
+   posts claiming a 2026 Python runtime are confusing `PYTHON_VERSION`, which
+   selects Python for *build scripts*, with a function runtime.) This backend
+   is Python with a compiled `psycopg` driver.
+2. **Netlify has no database.** You would be renting Postgres elsewhere
+   anyway, at which point the only thing Netlify contributes is the part this
+   app does not need.
+3. **A function is frozen once it responds.** The prefetch that warms
+   tomorrow's texts runs *after* the response is sent, so it would simply
+   never execute. Netlify's background functions are a different invocation
+   type, not "keep working after you answer".
+4. **Pooled connections and row locks assume a process that persists.**
+   `pool_size=10` is meaningless when every request is a fresh instance, and
+   serverless Postgres access needs an external pooler to avoid exhausting
+   connections.
+
+Measured, for scale: a cold portion request for a 10-mishnayot-per-day plan
+makes 80 Sefaria calls and takes ~26s; warm from the cache it is ~2s and the
+response is 109 KB. That fits inside Netlify's 60-second synchronous limit —
+the blockers above are structural, not about timeouts.
+
+Netlify remains the right host for a static site. It is simply a different
+kind of thing from this.
 
 ### There is no cron job
 

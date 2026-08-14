@@ -20,4 +20,6 @@ USER mishnah
 
 EXPOSE 8000
 # $PORT is what Render/Railway/Fly inject; 8000 is the local fallback.
+# Migrate, seed reference data, then serve. All three are idempotent, so a
+# restart or a redeploy is safe.
 CMD ["sh", "-c", "alembic upgrade head && python -m app.db.seed --no-create && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

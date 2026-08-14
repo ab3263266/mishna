@@ -37,7 +37,14 @@ async def lifespan(app: FastAPI):
         from app.db.seed import run as seed
 
         logger.info("seeding: %s", seed())
-    yield
+
+    from app.workers.scheduler import start, stop
+
+    sweep = start(app)
+    try:
+        yield
+    finally:
+        await stop(sweep)
 
 
 app = FastAPI(title="Mishnah Tracker API", version="1.0.0", lifespan=lifespan)

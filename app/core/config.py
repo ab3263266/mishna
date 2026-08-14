@@ -37,6 +37,14 @@ class Settings(BaseSettings):
     #: cookie is otherwise marked Secure.
     cookie_secure: bool = True
 
+    #: Hourly settlement sweep inside the web process. OFF by default because
+    #: nothing in the app currently needs it: `settle_user` runs on every read,
+    #: so a user who returns after three weeks is settled correctly the moment
+    #: they open the app. Turn it on when something has to be correct *without*
+    #: the user showing up - a leaderboard, or "your streak breaks in 3 hours"
+    #: notifications.
+    run_scheduler: bool = False
+
     google_client_id: str = ""
     google_client_secret: str = ""
     google_redirect_uri: str = ""

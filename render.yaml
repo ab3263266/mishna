@@ -1,0 +1,45 @@
+# Render blueprint: web service + Postgres + the hourly settlement job.
+# Deploy with: render.com -> New -> Blueprint -> point at this repo.
+services:
+  - type: web
+    name: mishnah-tracker
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: { name: mishnah-db, property: connectionString }
+      - key: JWT_SECRET
+        generateValue: true          # Render generates a strong secret
+      - key: DEV_MODE
+        value: "false"               # never true on a public host
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: PUBLIC_BASE_URL
+        sync: false                  # set to your https://... URL after first deploy
+      - key: GOOGLE_CLIENT_ID
+        sync: false                  # from Google Cloud Console
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false                  # <PUBLIC_BASE_URL>/api/v1/auth/google/callback
+
+  # Settlement runs hourly, not nightly: users are spread across timezones and
+  # each one's day rolls over at their own local 03:00.
+  - type: cron
+    name: mishnah-settlement
+    runtime: docker
+    plan: free
+    schedule: "0 * * * *"
+    dockerCommand: python -m app.workers.nightly
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: { name: mishnah-db, property: connectionString }
+      - key: DEV_MODE
+        value: "false"
+      - key: JWT_SECRET
+        generateValue: true
+
+databases:
+  - name: mishnah-db
+    plan: free

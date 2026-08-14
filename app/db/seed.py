@@ -114,5 +114,10 @@ def run(create_tables: bool = True) -> dict:
 
 
 if __name__ == "__main__":
+    import sys
+
     logging.basicConfig(level=logging.INFO)
-    print(run())
+    # In production Alembic owns the schema, so the container seeds with
+    # --no-create: create_all cannot express a migration, and letting both
+    # tools define tables is how they drift apart.
+    print(run(create_tables="--no-create" not in sys.argv))

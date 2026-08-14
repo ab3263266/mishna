@@ -191,6 +191,15 @@ def rotate_refresh_token(
     return pair
 
 
+def revoke_refresh_token(session: Session, raw_refresh: str) -> None:
+    """Best-effort logout. An unknown token is already not a session."""
+    record = session.execute(
+        select(RefreshToken).where(RefreshToken.token_hash == _hash(raw_refresh))
+    ).scalar_one_or_none()
+    if record is not None and record.revoked_at is None:
+        record.revoked_at = datetime.now(UTC)
+
+
 def decode_access_token(token: str) -> uuid.UUID:
     settings = get_settings()
     try:

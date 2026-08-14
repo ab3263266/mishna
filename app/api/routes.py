@@ -11,7 +11,7 @@ import logging
 from dataclasses import asdict
 from datetime import date
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
@@ -85,20 +85,55 @@ async def google_login(payload: GoogleLoginIn, session: DbSession) -> TokenOut:
 
 
 class RefreshIn(BaseModel):
-    refresh_token: str
+    refresh_token: str | None = None
 
 
 @router.post("/auth/refresh", response_model=TokenOut)
-def refresh(payload: RefreshIn, session: DbSession) -> TokenOut:
+def refresh(
+    request: Request,
+    response: Response,
+    session: DbSession,
+    payload: RefreshIn | None = None,
+) -> TokenOut:
+    """Rotate the session.
+
+    Prefers the HttpOnly cookie set by the Google flow; the body form stays
+    for non-browser clients. The rotated token goes straight back into the
+    cookie so page script never has to hold it.
+    """
+    from app.api.auth_google import REFRESH_COOKIE, set_refresh_cookie
+
+    supplied = (payload.refresh_token if payload else None) or request.cookies.get(
+        REFRESH_COOKIE
+    )
+    if not supplied:
+        raise HTTPException(401, {"code": "no_refresh_token"})
+
     try:
-        pair = rotate_refresh_token(session, payload.refresh_token)
+        pair = rotate_refresh_token(session, supplied, request.headers.get("user-agent"))
     except AuthError as exc:
+        response.delete_cookie(REFRESH_COOKIE, path="/")
         raise _handle(exc)
+
+    set_refresh_cookie(response, pair.refresh_token)
     return TokenOut(
         access_token=pair.access_token,
         refresh_token=pair.refresh_token,
         expires_in=pair.expires_in,
     )
+
+
+@router.post("/auth/logout")
+def logout(request: Request, response: Response, session: DbSession) -> dict:
+    """Revoke the refresh token and clear the cookie."""
+    from app.api.auth_google import REFRESH_COOKIE
+    from app.core.security import revoke_refresh_token
+
+    supplied = request.cookies.get(REFRESH_COOKIE)
+    if supplied:
+        revoke_refresh_token(session, supplied)
+    response.delete_cookie(REFRESH_COOKIE, path="/")
+    return {"ok": True}
 
 
 # --------------------------------------------------------------------------- #

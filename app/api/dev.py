@@ -14,12 +14,13 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 
 from app.api.deps import CurrentUser, DbSession
 from app.core import clock
+from app.api.auth_google import set_refresh_cookie
 from app.core.config import get_settings
 from app.core.security import GoogleIdentity, issue_tokens, upsert_user
 from app.models import (
@@ -52,7 +53,7 @@ class DevLoginIn(BaseModel):
 
 
 @router.post("/login")
-def dev_login(payload: DevLoginIn, session: DbSession) -> dict:
+def dev_login(payload: DevLoginIn, session: DbSession, response: Response) -> dict:
     """Passwordless login, standing in for the Google flow."""
     _guard()
 
@@ -79,6 +80,9 @@ def dev_login(payload: DevLoginIn, session: DbSession) -> dict:
     session.flush()
 
     pair = issue_tokens(session, user)
+    # Set the same HttpOnly cookie the Google flow uses, so the dev path
+    # exercises the real session mechanism instead of a parallel one.
+    set_refresh_cookie(response, pair.refresh_token)
     return {
         "access_token": pair.access_token,
         "refresh_token": pair.refresh_token,

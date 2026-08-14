@@ -24,8 +24,18 @@ class Settings(BaseSettings):
     database_url: str = f"sqlite+pysqlite:///{DEFAULT_SQLITE_PATH.as_posix()}"
 
     #: Unlocks /api/v1/dev/* : passwordless login, time travel, reset.
-    #: MUST be false in production - dev_login mints a session for any email.
-    dev_mode: bool = True
+    #: Defaults to OFF. `dev_login` mints a session for any email address and
+    #: `dev/time` moves the clock for the whole process, so this defaulting to
+    #: True would mean one forgotten environment variable is a full account
+    #: takeover. Local development opts in via .env instead.
+    dev_mode: bool = False
+
+    #: Where the browser lands after a successful Google sign-in.
+    public_base_url: str = "http://localhost:8010"
+
+    #: Set false only when serving over plain HTTP locally; the refresh-token
+    #: cookie is otherwise marked Secure.
+    cookie_secure: bool = True
 
     google_client_id: str = ""
     google_client_secret: str = ""

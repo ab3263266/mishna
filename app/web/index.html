@@ -146,16 +146,30 @@
     <div class="card" style="margin-top:56px">
       <h2>משנה יומית</h2>
       <p class="sub">לימוד משנה יומי — הטקסט, הפירושים, ומעקב.</p>
-      <label for="email">אימייל</label>
-      <input id="email" class="full" value="demo@example.com" autocomplete="off">
-      <label for="shabbat-mode">שמירת שבת</label>
-      <select id="shabbat-mode" class="full">
-        <option value="1">כן — הפעל מצב שבת</option>
-        <option value="0">לא</option>
-      </select>
-      <div class="row" style="margin-top:18px">
-        <button class="primary wide" onclick="devLogin()">כניסה</button>
+      <div id="auth-error" class="hidden" style="margin-bottom:14px"></div>
+
+      <div id="google-login" class="hidden">
+        <button class="primary wide" onclick="location.href='/api/v1/auth/google/login?tz='+encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)">
+          התחברות עם Google
+        </button>
       </div>
+
+      <div id="dev-login" class="hidden">
+        <label for="email">אימייל</label>
+        <input id="email" class="full" value="demo@example.com" autocomplete="off">
+        <label for="shabbat-mode">שמירת שבת</label>
+        <select id="shabbat-mode" class="full">
+          <option value="1">כן — הפעל מצב שבת</option>
+          <option value="0">לא</option>
+        </select>
+        <div class="row" style="margin-top:18px">
+          <button class="primary wide" onclick="devLogin()">כניסת פיתוח</button>
+        </div>
+      </div>
+
+      <p id="no-login" class="sub hidden" style="margin-top:16px">
+        ההתחברות אינה מוגדרת בשרת. יש להגדיר <code>GOOGLE_CLIENT_ID</code>.
+      </p>
     </div>
   </section>
 
@@ -789,10 +803,57 @@ async function resetAll(){
   browseOrdinal = null; toast("אופס"); await boot();
 }
 
+const AUTH_ERRORS = {
+  state_mismatch: "בקשת ההתחברות לא תואמת. נסה שוב.",
+  flow_expired:   "תהליך ההתחברות פג. נסה שוב.",
+  flow_invalid:   "תהליך ההתחברות אינו תקין. נסה שוב.",
+  exchange_failed:"Google דחתה את ההתחברות. נסה שוב.",
+  email_unverified:"כתובת המייל אצל Google אינה מאומתת.",
+  missing_code:   "לא התקבל קוד מ־Google.",
+  access_denied:  "ביטלת את ההתחברות."
+};
+
+async function showLoginScreen(){
+  let config = {google:false, dev_mode:false};
+  try { config = await api("/auth/google/configured"); } catch {}
+  document.getElementById("google-login").classList.toggle("hidden", !config.google);
+  document.getElementById("dev-login").classList.toggle("hidden", !config.dev_mode);
+  document.getElementById("no-login").classList.toggle(
+    "hidden", config.google || config.dev_mode);
+  document.querySelector(".devbar").classList.toggle("hidden", !config.dev_mode);
+
+  const err = new URLSearchParams(location.search).get("auth_error");
+  if (err){
+    const box = document.getElementById("auth-error");
+    box.className = "banner shabbat";
+    box.textContent = AUTH_ERRORS[err] || ("שגיאת התחברות: " + err);
+    history.replaceState({}, "", location.pathname);
+  }
+  show("login");
+}
+
+async function logout(){
+  try { await api("/auth/logout", {method:"POST"}); } catch {}
+  token = ""; localStorage.removeItem("token");
+  await showLoginScreen();
+}
+
 (async () => {
   try { tractates = await api("/tractates"); } catch {}
-  if (!token){ show("login"); await tick(); return; }
-  try { await boot(); } catch { show("login"); }
+
+  // The Google flow leaves the session in an HttpOnly cookie that script
+  // cannot read, so the first thing the page does is trade it for a
+  // short-lived access token held only in memory.
+  if (!token){
+    try {
+      const pair = await api("/auth/refresh", {method:"POST"});
+      token = pair.access_token;
+      localStorage.setItem("token", token);
+    } catch { /* no session yet */ }
+  }
+
+  if (!token){ await showLoginScreen(); return; }
+  try { await boot(); } catch { await showLoginScreen(); }
 })();
 </script>
 </body>

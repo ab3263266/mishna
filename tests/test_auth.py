@@ -103,7 +103,11 @@ def client(monkeypatch) -> TestClient:
             session.close()
 
     app.dependency_overrides[get_session] = override
-    with TestClient(app) as test_client:
+    # https, because the refresh cookie is marked Secure by default and a
+    # plain-http client would silently drop it - which made the session tests
+    # pass or fail depending on whether the developer's .env happened to set
+    # COOKIE_SECURE=false. This exercises the production configuration.
+    with TestClient(app, base_url="https://testserver") as test_client:
         test_client.engine = engine
         test_client.sessionmaker = TestingSession
         yield test_client

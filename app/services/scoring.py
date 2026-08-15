@@ -35,7 +35,6 @@ class ScoringRules:
     )
 
     miss_penalty: int = 15
-    motash_bonus: int = 5
     streak_freeze_cost: int = 120
 
     #: Points never go below this. A user who returns after a month should find

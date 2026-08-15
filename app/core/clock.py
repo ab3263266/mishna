@@ -5,7 +5,7 @@ Every service reads the time through `clock.now()` rather than calling
 
 * tests can drive the engine through a month in milliseconds;
 * the dev UI can time-travel, which is the only practical way to *see* a
-  7-day streak or a Shabbat freeze without waiting a week.
+  7-day streak or a missed-day penalty without waiting a week.
 
 The offset is process-local and only mutable when `dev_mode` is on. Auth token
 expiry deliberately does NOT use this clock - time-travelling your own session

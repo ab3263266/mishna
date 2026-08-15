@@ -166,9 +166,15 @@ async def google_callback(
 
 @router.get("/configured")
 def google_configured() -> dict:
-    """Lets the UI show the right sign-in button without guessing."""
+    """Lets the UI show the right sign-in options without guessing.
+
+    `password` is unconditional - email and password need no configuration, and
+    it is what stops a deployment with no Google credentials from having no way
+    in at all.
+    """
     settings = get_settings()
     return {
         "google": bool(settings.google_client_id),
+        "password": True,
         "dev_mode": settings.dev_mode,
     }

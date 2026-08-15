@@ -1,14 +1,16 @@
-"""Mishnah text and commentaries, from Sefaria.
+"""Mishnah text and commentaries.
 
 This is the part of the app people actually come for. The scoring exists to
 get someone to open it; this is what they read once they have.
 
 Sourcing rules:
 
-* Everything is fetched from Sefaria's public API and cached permanently in
-  `text_cache`. The texts do not change, so there is no invalidation - the
-  cache exists so the study screen renders when Sefaria is slow, rate-limiting
-  or unreachable.
+* The whole corpus is downloaded once by `scripts/fetch_texts.py` and committed
+  under `app/data/texts/` - one gzipped JSON file per tractate. Nothing here
+  touches the network: a study screen that depends on Sefaria being reachable
+  is a study screen that breaks on a train, during a rate-limit, or on the
+  morning Sefaria is down. The texts are centuries old and do not change, so
+  there is no invalidation problem to trade against.
 * Each passage carries its licence and version through to the UI. Two of the
   commentaries are CC-BY-NC and must be attributed; quietly stripping that is
   not an option.
@@ -18,31 +20,31 @@ Sourcing rules:
 
 from __future__ import annotations
 
+import gzip
+import json
 import logging
+import pathlib
 import re
 from dataclasses import dataclass, field
-
-import httpx
-from sqlalchemy import select
-from sqlalchemy.orm import Session
-
-from app.models import Mishnah, TextCache, Tractate
+from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 
-SEFARIA_API = "https://www.sefaria.org/api/v3/texts"
 SEFARIA_WEB = "https://www.sefaria.org"
-TIMEOUT = httpx.Timeout(12.0, connect=5.0)
+
+#: One `<slug>.json.gz` per tractate, written by scripts/fetch_texts.py.
+DATA_DIR = pathlib.Path(__file__).parent.parent / "data" / "texts"
 
 
 @dataclass(frozen=True, slots=True)
 class Commentator:
     key: str
     name_he: str
-    #: Sefaria ref template. `{book}` is the tractate's Sefaria title with the
-    #: "Mishnah " prefix already included where the commentary expects it.
-    ref_template: str
-    language: str = "he"
+    #: Sefaria book title template. `{book}` is the tractate's Sefaria title,
+    #: "Mishnah " prefix included. Formatting it gives the `index_title` that
+    #: identifies this commentary in Sefaria's link graph, which is how the
+    #: fetch script decides what belongs to which mishnah.
+    book_template: str
     note: str = ""
 
 
@@ -50,22 +52,14 @@ class Commentator:
 #: it is the one people mean by "the commentary", then the Rambam, then the
 #: heavier iyun material. The UI opens the first and collapses the rest.
 COMMENTATORS: tuple[Commentator, ...] = (
-    Commentator("bartenura", "ברטנורא", "Bartenura on {book} {ch}:{n}"),
-    Commentator("rambam", "פירוש הרמב״ם", "Rambam on {book} {ch}:{n}"),
-    Commentator(
-        "ikar_tosafot", "עיקר תוספות יום טוב",
-        "Ikar Tosafot Yom Tov on {book} {ch}:{n}",
-    ),
-    Commentator(
-        "tosafot_yom_tov", "תוספות יום טוב",
-        "Tosafot Yom Tov on {book} {ch}:{n}",
-    ),
-    Commentator("yachin", "תפארת ישראל – יכין", "Yachin on {book} {ch}:{n}"),
-    Commentator("boaz", "תפארת ישראל – בועז", "Boaz on {book} {ch}:{n}"),
-    Commentator(
-        "kulp", "English explanation", "English Explanation of {book} {ch}:{n}",
-        language="en", note="Dr. Joshua Kulp, Mishnah Yomit",
-    ),
+    Commentator("bartenura", "ברטנורא", "Bartenura on {book}"),
+    Commentator("rambam", "פירוש הרמב״ם", "Rambam on {book}"),
+    Commentator("ikar_tosafot", "עיקר תוספות יום טוב",
+                "Ikar Tosafot Yom Tov on {book}"),
+    Commentator("tosafot_yom_tov", "תוספות יום טוב",
+                "Tosafot Yom Tov on {book}"),
+    Commentator("yachin", "תפארת ישראל – יכין", "Yachin on {book}"),
+    Commentator("boaz", "תפארת ישראל – בועז", "Boaz on {book}"),
 )
 COMMENTATORS_BY_KEY = {c.key: c for c in COMMENTATORS}
 
@@ -100,7 +94,9 @@ class MishnahView:
 
 
 # --------------------------------------------------------------------------- #
-# Fetching
+# Cleaning Sefaria's markup - used by the fetch script, before anything is
+# written to disk. Kept here because what counts as "safe markup" is a property
+# of what this app renders, not of the downloader.
 # --------------------------------------------------------------------------- #
 
 
@@ -112,7 +108,7 @@ def _flatten(value) -> str:
     if isinstance(value, str):
         return value
     if isinstance(value, (list, tuple)):
-        return " ".join(_flatten(v) for v in value if v)
+        return " ".join(part for part in (_flatten(v) for v in value) if part)
     return str(value)
 
 
@@ -132,6 +128,7 @@ def sanitize(html: str) -> str:
     if not html:
         return ""
     html = _FOOTNOTE.sub("", html)
+
     # Drop any tag that is not explicitly allowed.
     def keep(match: re.Match) -> str:
         return match.group(0) if _ALLOWED.fullmatch(match.group(0)) else ""
@@ -140,182 +137,110 @@ def sanitize(html: str) -> str:
     return re.sub(r"\s+", " ", html).strip()
 
 
-def _fetch_from_sefaria(ref: str) -> dict | None:
-    try:
-        with httpx.Client(timeout=TIMEOUT, follow_redirects=True) as client:
-            response = client.get(f"{SEFARIA_API}/{ref}")
-    except httpx.HTTPError as exc:
-        logger.warning("sefaria unreachable for %s: %s", ref, exc)
-        return None
-
-    if response.status_code != 200:
-        logger.info("sefaria %s for %s", response.status_code, ref)
-        return None
-    return response.json()
+# --------------------------------------------------------------------------- #
+# Reading the corpus
+# --------------------------------------------------------------------------- #
 
 
-def load_passage(
-    session: Session, ref: str, kind: str, *, allow_network: bool = True
-) -> Passage | None:
-    """Cache-first read of a single Sefaria ref."""
-    cached = session.get(TextCache, (ref, kind))
-    if cached is not None:
-        return _passage_from_cache(cached, kind)
+@lru_cache(maxsize=8)
+def _load(slug: str) -> dict | None:
+    """One tractate's texts, parsed and held in memory.
 
-    if not allow_network:
-        return None
-
-    # The network call happens with no transaction open. Fetching inside one
-    # would hold a write lock for the length of an HTTP round trip - and
-    # assembling a mishnah makes eight of them, which is long enough to make
-    # every concurrent write in the process fail.
-    payload = _fetch_from_sefaria(ref)
-    if payload is None:
-        return None
-
-    versions = payload.get("versions") or []
-    if not versions:
-        return None
-    version = versions[0]
-    body = sanitize(_flatten(version.get("text")))
-    if not body:
-        return None
-
-    row = TextCache(
-        ref=ref,
-        kind=kind,
-        he_ref=payload.get("heRef"),
-        language=version.get("language") or "he",
-        body=body,
-        license=version.get("license"),
-        version_title=version.get("versionTitle"),
-    )
-    _store(row)
-    return _passage_from_cache(row, kind)
-
-
-def _store(row: TextCache) -> None:
-    """Persist one cached passage in its own short transaction.
-
-    Deliberately *not* the caller's session. The cache is independent of
-    whatever business transaction is in flight: a study log should not be able
-    to roll back a text we already fetched, and warming the cache must never
-    hold a lock that a real write is waiting behind. Failure here is silent by
-    design - an uncached passage is a slower screen, not a broken one.
+    A tractate is a few hundred kilobytes of JSON, and a learner reads the same
+    one for weeks, so the LRU keeps the hot tractate resident and the parse cost
+    is paid once per process rather than once per request. Eight slots covers a
+    handful of concurrent learners without turning into a memory sink.
     """
-    from app.db.session import SessionLocal
-
+    path = DATA_DIR / f"{slug}.json.gz"
+    if not path.exists():
+        logger.warning("no text file for tractate %s at %s", slug, path)
+        return None
     try:
-        with SessionLocal() as write_session:
-            write_session.merge(
-                TextCache(
-                    ref=row.ref,
-                    kind=row.kind,
-                    he_ref=row.he_ref,
-                    language=row.language,
-                    body=row.body,
-                    license=row.license,
-                    version_title=row.version_title,
-                )
-            )
-            write_session.commit()
-    except Exception:
-        logger.warning("could not cache %s/%s", row.ref, row.kind, exc_info=True)
+        with gzip.open(path, "rt", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        logger.exception("could not read %s", path)
+        return None
+    # Index by ordinal once, so lookups are a dict hit rather than a scan.
+    payload["by_ordinal"] = {m["ordinal"]: m for m in payload["mishnayot"]}
+    return payload
 
 
-def _passage_from_cache(row: TextCache, kind: str) -> Passage:
-    commentator = COMMENTATORS_BY_KEY.get(kind)
+def available_tractates() -> set[str]:
+    """Slugs that have a text file - what `scripts/fetch_texts.py` produced."""
+    if not DATA_DIR.exists():
+        return set()
+    return {path.name.removesuffix(".json.gz") for path in DATA_DIR.glob("*.json.gz")}
+
+
+def _passage(
+    key: str, ref: str, he_ref: str | None, body: str, source: dict
+) -> Passage:
+    commentator = COMMENTATORS_BY_KEY.get(key)
     return Passage(
-        key=kind,
+        key=key,
         title=commentator.name_he if commentator else "משנה",
-        ref=row.ref,
-        he_ref=row.he_ref,
-        language=row.language,
-        body=row.body,
-        license=row.license,
-        version_title=row.version_title,
+        ref=ref,
+        he_ref=he_ref,
+        language="he",
+        body=body,
+        license=source.get("license"),
+        version_title=source.get("version"),
         note=commentator.note if commentator else "",
     )
 
 
-# --------------------------------------------------------------------------- #
-# Assembling a mishnah
-# --------------------------------------------------------------------------- #
-
-
-def _refs_for(tractate: Tractate, mishnah: Mishnah) -> tuple[str, dict[str, str]]:
-    book = tractate.sefaria_title or f"Mishnah {tractate.name_en}"
-    # Tiferet Yisrael is filed under the bare tractate name, not "Mishnah X".
-    short = book.removeprefix("Mishnah ")
-    base = f"{book} {mishnah.chapter}:{mishnah.number}"
-    commentary_refs = {
-        c.key: c.ref_template.format(book=book, short=short,
-                                     ch=mishnah.chapter, n=mishnah.number)
-        for c in COMMENTATORS
-    }
-    return base, commentary_refs
-
-
 def get_mishnah(
-    session: Session,
-    tractate: Tractate,
-    ordinal: int,
-    *,
-    with_commentaries: bool = True,
-    allow_network: bool = True,
+    tractate, ordinal: int, *, with_commentaries: bool = True
 ) -> MishnahView | None:
-    mishnah = session.execute(
-        select(Mishnah).where(
-            Mishnah.tractate_id == tractate.id, Mishnah.ordinal == ordinal
-        )
-    ).scalar_one_or_none()
-    if mishnah is None:
+    """One mishnah with its commentaries, straight off disk."""
+    corpus = _load(tractate.slug)
+    if corpus is None:
+        return None
+    entry = corpus["by_ordinal"].get(ordinal)
+    if entry is None:
         return None
 
-    base_ref, commentary_refs = _refs_for(tractate, mishnah)
-    text = load_passage(session, base_ref, "mishnah", allow_network=allow_network)
+    sources = corpus.get("sources", {})
+    text_body = entry.get("text") or ""
+    text = (
+        _passage("mishnah", entry["ref"], entry.get("he_ref"), text_body,
+                 sources.get("mishnah", {}))
+        if text_body
+        else None
+    )
 
     commentaries: list[Passage] = []
     if with_commentaries:
+        stored = entry.get("commentaries") or {}
         for commentator in COMMENTATORS:
-            passage = load_passage(
-                session,
-                commentary_refs[commentator.key],
-                commentator.key,
-                allow_network=allow_network,
-            )
+            body = stored.get(commentator.key)
             # Absent commentaries are normal - not every mishnah has every
             # commentator - so a miss is skipped, never surfaced as an error.
-            if passage is not None:
-                commentaries.append(passage)
+            if not body:
+                continue
+            source = sources.get(commentator.key, {})
+            commentaries.append(
+                _passage(
+                    commentator.key,
+                    commentator.book_template.format(book=corpus["book"])
+                    + f" {entry['chapter']}:{entry['number']}",
+                    None,
+                    body,
+                    source,
+                )
+            )
 
     return MishnahView(
         ordinal=ordinal,
-        chapter=mishnah.chapter,
-        number=mishnah.number,
+        chapter=entry["chapter"],
+        number=entry["number"],
         tractate_he=tractate.name_he,
-        ref=base_ref,
-        he_ref=text.he_ref if text else None,
+        ref=entry["ref"],
+        he_ref=entry.get("he_ref"),
         text=text,
         commentaries=commentaries,
     )
-
-
-def prefetch(session: Session, tractate: Tractate, ordinals: list[int]) -> int:
-    """Warm the cache for upcoming mishnayot.
-
-    Called after a study session so tomorrow's text is already local. Failures
-    are swallowed: a cold cache is a slow screen, not a broken one.
-    """
-    warmed = 0
-    for ordinal in ordinals:
-        try:
-            if get_mishnah(session, tractate, ordinal) is not None:
-                warmed += 1
-        except Exception:  # pragma: no cover - best effort by design
-            session.rollback()
-            logger.warning("prefetch skipped %s %s", tractate.slug, ordinal)
-    return warmed
 
 
 def as_dict(view: MishnahView) -> dict:

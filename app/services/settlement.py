@@ -14,8 +14,7 @@ Why this shape:
   who *never* open the app still get their penalties recorded, and so the
   leaderboard is not stale.
 * **Ordered.** Days are resolved chronologically because the multiplier depends
-  on the streak, which depends on the previous day. Friday must resolve before
-  Saturday, or the Shabbat double credit scores at the wrong tier.
+  on the streak, which depends on the previous day.
 
 The one rule that surprises people: settlement never finalises *today*. Today
 is still winnable.
@@ -27,7 +26,7 @@ import enum
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -41,7 +40,6 @@ from app.models import (
     DayStatus,
     FreezeUsage,
     PlanStatus,
-    ShabbatReport,
     StudyDay,
     StudyPlan,
     TxnType,
@@ -50,23 +48,8 @@ from app.models import (
     UserStats,
 )
 from app.services import ledger
-from app.services.calendar import (
-    UserClock,
-    classify_day,
-    location_for,
-    required_units_for,
-    shabbat_report_deadline,
-)
+from app.services.calendar import UserClock, classify_day, required_units_for
 from app.services.scoring import ScoringRules, penalty_for_miss, points_for_completion
-from app.services.zmanim import (
-    FRIDAY,
-    Location,
-    SATURDAY,
-    ZmanimLibraryProvider,
-    ZmanimProvider,
-    enclosing_shabbat_friday,
-    window_for_moment,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -78,9 +61,8 @@ class Decision(enum.StrEnum):
     CREDIT = "credit"
     MISS = "miss"
     FREEZE = "freeze"
-    NEUTRAL_SHABBAT = "neutral_shabbat"
+    REST = "rest"
     EXEMPT = "exempt"
-    DEFER = "defer"  # not resolvable yet - stop the walk here
 
 
 @dataclass(slots=True)
@@ -89,14 +71,9 @@ class SettlementContext:
     plan: StudyPlan
     stats: UserStats
     clock: UserClock
-    location: Location
-    provider: ZmanimProvider
     rules: ScoringRules
     settings: Settings
     now: datetime
-    #: True when `now` sits inside a Shabbat/Yom Tov rest window. Spec 3.2: the
-    #: penalty timer pauses, so no day may be finalised as MISSED right now.
-    in_rest_window: bool = False
 
 
 @dataclass(slots=True)
@@ -122,7 +99,6 @@ def settle_user(
     user: User,
     now: datetime | None = None,
     *,
-    provider: ZmanimProvider | None = None,
     rules: ScoringRules | None = None,
 ) -> SettlementOutcome:
     now = now or clock.now()
@@ -141,24 +117,14 @@ def settle_user(
     # Serialise every scoring write for this user behind one row lock.
     stats = ledger.lock_stats(session, user.id)
 
-    location = location_for(user)
-    provider = provider or ZmanimLibraryProvider(
-        pre_freeze_minutes=settings.pre_shabbat_freeze_minutes
-    )
     ctx = SettlementContext(
         user=user,
         plan=plan,
         stats=stats,
-        clock=UserClock.for_location(location, settings.day_rollover_hour),
-        location=location,
-        provider=provider,
+        clock=UserClock.for_user(user, settings.day_rollover_hour),
         rules=rules or _rules_from_settings(settings),
         settings=settings,
         now=now,
-    )
-    ctx.in_rest_window = (
-        user.observes_shabbat
-        and window_for_moment(provider, location, now) is not None
     )
 
     today = ctx.clock.local_date(now)
@@ -176,24 +142,18 @@ def settle_user(
         day = get_or_create_day(session, ctx, cursor)
         decision = _decide(session, ctx, day)
 
-        if decision is Decision.DEFER:
-            outcome.stopped_reason = f"deferred_at_{cursor.isoformat()}"
-            break
-
         _apply(session, ctx, day, decision)
         if decision is not Decision.CARRY:
             outcome.days_resolved.append((cursor, day.status))
         if decision is Decision.FREEZE:
             outcome.freezes_used += 1
 
-        # Only advance the watermark for days we actually finalised. A deferred
-        # Friday must be revisited, so the watermark stays behind it.
         stats.last_settled_date = cursor
         cursor += timedelta(days=1)
         processed += 1
 
-    # Today's row must exist so the client can render "0 / 4 today" and so the
-    # Friday double portion is visible from Friday morning (spec 3.1).
+    # Today's row must exist so the client can render "0 / 4 today", and so a
+    # rest day is visible as one from the moment it starts.
     if plan.status == PlanStatus.ACTIVE:
         get_or_create_day(session, ctx, today)
 
@@ -207,7 +167,6 @@ def _rules_from_settings(settings: Settings) -> ScoringRules:
     return ScoringRules(
         base_points=settings.base_points,
         miss_penalty=settings.miss_penalty,
-        motash_bonus=settings.motash_bonus,
         streak_freeze_cost=settings.streak_freeze_cost,
     )
 
@@ -228,9 +187,7 @@ def get_or_create_day(
     if day is not None:
         return day
 
-    kind = classify_day(
-        d, ctx.location, ctx.user.observes_shabbat, ctx.user.observes_yom_tov
-    )
+    kind = classify_day(d, ctx.user.study_week)
     day = StudyDay(
         user_id=ctx.user.id,
         plan_id=ctx.plan.id,
@@ -238,12 +195,7 @@ def get_or_create_day(
         day_kind=kind,
         required_units=required_units_for(kind, ctx.plan.daily_goal),
         completed_units=0,
-        status=(
-            DayStatus.SHABBAT_PENDING
-            if kind in (DayKind.EREV_SHABBAT, DayKind.SHABBAT)
-            and ctx.user.observes_shabbat
-            else DayStatus.PENDING
-        ),
+        status=DayStatus.PENDING,
     )
     session.add(day)
     session.flush()
@@ -261,91 +213,23 @@ def _decide(session: Session, ctx: SettlementContext, day: StudyDay) -> Decision
     if day.local_date < ctx.plan.start_date:
         return Decision.EXEMPT
 
-    goal_met = day.required_units > 0 and day.completed_units >= day.required_units
-
-    if ctx.user.observes_shabbat and day.day_kind in (
-        DayKind.EREV_SHABBAT,
-        DayKind.SHABBAT,
-    ):
-        return _decide_shabbat(session, ctx, day, goal_met)
-
-    if day.day_kind == DayKind.YOM_TOV:
-        # Yom Tov is never punished. Credit it if the user did log study
-        # (some users keep only Shabbat), otherwise hold the streak steady.
+    if day.day_kind is DayKind.REST_DAY:
+        # A rest day is never punished. Credit it if they learned anyway - a
+        # five-day learner who opens the app on Shabbat should be rewarded for
+        # it, not told the day does not count.
         return (
             Decision.CREDIT
             if day.completed_units >= ctx.plan.daily_goal
-            else Decision.NEUTRAL_SHABBAT
+            else Decision.REST
         )
 
-    if goal_met:
+    if day.required_units > 0 and day.completed_units >= day.required_units:
         return Decision.CREDIT
-
-    # Spec 3.2: while the user is inside the Shabbat window, the penalty timer
-    # is paused. A Thursday left unfinished waits until Motzash to be judged.
-    if ctx.in_rest_window:
-        return Decision.DEFER
 
     if _freeze_available(session, ctx):
         return Decision.FREEZE
 
     return Decision.MISS
-
-
-def _decide_shabbat(
-    session: Session, ctx: SettlementContext, day: StudyDay, goal_met: bool
-) -> Decision:
-    """Friday and Saturday resolve as a pair, gated on the Motzash report."""
-    saturday = (
-        day.local_date
-        if day.day_kind == DayKind.SHABBAT
-        else day.local_date + timedelta(days=1)
-    )
-    report = session.execute(
-        select(ShabbatReport).where(
-            ShabbatReport.user_id == ctx.user.id,
-            ShabbatReport.shabbat_date == saturday,
-        )
-    ).scalar_one_or_none()
-
-    if report is not None and report.completed:
-        return Decision.CREDIT
-
-    if day.day_kind == DayKind.EREV_SHABBAT and goal_met:
-        # They logged the full double portion on Friday morning, in-app.
-        return Decision.CREDIT
-
-    if day.day_kind == DayKind.SHABBAT and _friday_double_portion_logged(
-        session, ctx, saturday - timedelta(days=1)
-    ):
-        # Product decision: logging Friday's double portion *is* doing
-        # Saturday's quota, so Saturday credits without the checkbox. The
-        # checkbox is still the only way to earn the Motash bonus.
-        return Decision.CREDIT
-
-    deadline = shabbat_report_deadline(
-        ctx.clock, saturday, ctx.settings.shabbat_report_grace_days
-    )
-    if ctx.now < deadline:
-        return Decision.DEFER
-
-    # Spec 3.3: no login over Shabbat costs neither the streak nor points.
-    return Decision.NEUTRAL_SHABBAT
-
-
-def _friday_double_portion_logged(
-    session: Session, ctx: SettlementContext, friday: date
-) -> bool:
-    fri = session.execute(
-        select(StudyDay).where(
-            StudyDay.user_id == ctx.user.id, StudyDay.local_date == friday
-        )
-    ).scalar_one_or_none()
-    return (
-        fri is not None
-        and fri.required_units > 0
-        and fri.completed_units >= fri.required_units
-    )
 
 
 def _freeze_available(session: Session, ctx: SettlementContext) -> bool:
@@ -381,8 +265,8 @@ def _apply(
             _miss_day(session, ctx, day)
         case Decision.FREEZE:
             _freeze_day(session, ctx, day)
-        case Decision.NEUTRAL_SHABBAT:
-            _neutral_day(ctx, day, DayStatus.SHABBAT_UNREPORTED)
+        case Decision.REST:
+            _neutral_day(ctx, day, DayStatus.REST_DAY)
         case Decision.EXEMPT:
             _neutral_day(ctx, day, DayStatus.EXEMPT)
 
@@ -402,17 +286,12 @@ def credit_day(
 
     new_streak = ctx.stats.current_streak + 1
     points = points_for_completion(ctx.rules, new_streak)
-    txn_type = (
-        TxnType.SHABBAT_STUDY
-        if day.day_kind in (DayKind.EREV_SHABBAT, DayKind.SHABBAT)
-        else TxnType.DAILY_STUDY
-    )
 
     posted = ledger.post_transaction(
         session,
         ctx.stats,
         amount=points,
-        txn_type=txn_type,
+        txn_type=TxnType.DAILY_STUDY,
         idempotency_key=ledger.daily_key(ctx.user.id, day.local_date),
         related_date=day.local_date,
         meta={"streak": new_streak, "source": str(source)},
@@ -485,22 +364,12 @@ def build_context(
 ) -> SettlementContext:
     """Context builder for callers that already hold the lock (study.py, shop.py)."""
     settings = get_settings()
-    location = location_for(user)
-    provider = ZmanimLibraryProvider(
-        pre_freeze_minutes=settings.pre_shabbat_freeze_minutes
-    )
-    ctx = SettlementContext(
+    return SettlementContext(
         user=user,
         plan=plan,
         stats=stats,
-        clock=UserClock.for_location(location, settings.day_rollover_hour),
-        location=location,
-        provider=provider,
+        clock=UserClock.for_user(user, settings.day_rollover_hour),
         rules=_rules_from_settings(settings),
         settings=settings,
         now=now,
     )
-    ctx.in_rest_window = (
-        user.observes_shabbat and window_for_moment(provider, location, now) is not None
-    )
-    return ctx

@@ -33,8 +33,8 @@ def _upsert_insert(session: Session):
 def lock_stats(session: Session, user_id: uuid.UUID) -> UserStats:
     """Take a row lock that serialises every scoring write for this user.
 
-    All mutating paths (log study, settle, purchase, Shabbat report) acquire
-    this first, in this order, so two concurrent requests cannot both read
+    All mutating paths (log study, settle, purchase) acquire this first, in
+    this order, so two concurrent requests cannot both read
     streak=3 and both write streak=4.
 
     SQLite has no row locks - it takes a database-wide write lock instead,
@@ -120,10 +120,6 @@ def daily_key(user_id: uuid.UUID, d: date) -> str:
 
 def penalty_key(user_id: uuid.UUID, d: date) -> str:
     return f"penalty:{user_id}:{d.isoformat()}"
-
-
-def motash_key(user_id: uuid.UUID, saturday: date) -> str:
-    return f"motash:{user_id}:{saturday.isoformat()}"
 
 
 def purchase_key(user_id: uuid.UUID, sku: str, nonce: str) -> str:

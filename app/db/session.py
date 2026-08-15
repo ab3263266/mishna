@@ -47,9 +47,9 @@ def get_session() -> Iterator[Session]:
     """One transaction per request.
 
     Committing here rather than inside the services keeps the settlement engine
-    composable: `report_shabbat` can call `settle_user` and both land in the
-    same transaction, so a crash halfway cannot leave points awarded but the
-    streak un-advanced.
+    composable: `log_study` can call `settle_user` and both land in the same
+    transaction, so a crash halfway cannot leave points awarded but the streak
+    un-advanced.
     """
     session = SessionLocal()
     try:

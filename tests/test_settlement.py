@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -28,19 +28,19 @@ from app.models import (
     StudyDay,
     ShopItem,
     StudyPlan,
+    StudyWeek,
     Tractate,
     User,
     UserInventory,
     UserStats,
 )
-from app.services import settlement, shop, study
-from app.services.zmanim import FixedClockProvider
+from app.services import settlement, study
 
 TEST_DB = os.getenv("TEST_DATABASE_URL", "sqlite+pysqlite:///:memory:")
 
 JERUSALEM = ZoneInfo("Asia/Jerusalem")
-PROVIDER = FixedClockProvider(onset_hour=18, end_hour=20, pre_freeze_minutes=60)
 
+SUNDAY = date(2026, 8, 9)
 MONDAY = date(2026, 8, 10)
 FRIDAY = date(2026, 8, 14)
 SATURDAY = date(2026, 8, 15)
@@ -78,35 +78,51 @@ def session() -> Session:
         yield s
 
 
-@pytest.fixture
-def user(session: Session) -> User:
+def make_user(session: Session, week: StudyWeek, start: date = MONDAY) -> User:
     u = User(
         google_sub=f"sub-{uuid.uuid4()}",
         email="a@example.com",
         timezone="Asia/Jerusalem",
-        observes_shabbat=True,
-        observes_yom_tov=False,
+        study_week=week,
     )
     session.add(u)
     session.flush()
     session.add(UserStats(user_id=u.id, total_points=0))
-    session.add(
-        StudyPlan(user_id=u.id, tractate_id=1, daily_goal=2, start_date=MONDAY)
-    )
+    session.add(StudyPlan(user_id=u.id, tractate_id=1, daily_goal=2, start_date=start))
     session.commit()
     return u
 
 
+@pytest.fixture
+def user(session: Session) -> User:
+    """The default learner studies all seven days."""
+    return make_user(session, StudyWeek.SEVEN_DAYS)
+
+
+@pytest.fixture
+def five_day_user(session: Session) -> User:
+    return make_user(session, StudyWeek.FIVE_DAYS, start=SUNDAY)
+
+
 def settle(session, user, moment):
-    return settlement.settle_user(session, user, moment, provider=PROVIDER)
+    return settlement.settle_user(session, user, moment)
 
 
 def log(session, user, units, moment):
     return study.log_study(session, user, units, now=moment)
 
 
+def statuses(session, user) -> dict[date, str]:
+    return {
+        d.local_date: d.status
+        for d in session.execute(
+            select(StudyDay).where(StudyDay.user_id == user.id)
+        ).scalars()
+    }
+
+
 # --------------------------------------------------------------------------- #
-# Spec 2.1 / 2.2
+# Points and the multiplier
 # --------------------------------------------------------------------------- #
 
 
@@ -122,7 +138,7 @@ def test_fourth_consecutive_day_pays_the_multiplier(session, user):
 
 
 # --------------------------------------------------------------------------- #
-# Spec 2.3
+# Misses
 # --------------------------------------------------------------------------- #
 
 
@@ -145,7 +161,7 @@ def test_the_penalty_cannot_push_the_balance_negative(session, user):
 
 
 # --------------------------------------------------------------------------- #
-# Spec 2.4 - streak freeze
+# Streak freeze
 # --------------------------------------------------------------------------- #
 
 
@@ -168,43 +184,67 @@ def test_a_freeze_absorbs_the_miss_without_advancing_the_streak(session, user):
 
 
 # --------------------------------------------------------------------------- #
-# Spec 3.3 - no login over Shabbat is free
+# The seven-day week: Friday and Shabbat are ordinary days
 # --------------------------------------------------------------------------- #
 
 
-def test_shabbat_without_a_report_costs_nothing(session, user):
-    for offset in range(4):  # Mon-Thu -> streak 4
-        log(session, user, 2, at(MONDAY + timedelta(days=offset), 9))
+def test_friday_and_shabbat_are_ordinary_days_on_a_seven_day_week(session, user):
+    friday = log(session, user, 2, at(FRIDAY, 10))
+    saturday = log(session, user, 2, at(SATURDAY, 10))
+
+    assert friday.units_logged == 2, "no doubled quota on a Friday"
+    assert friday.day_completed and saturday.day_completed
+
+    days = session.execute(
+        select(StudyDay).where(StudyDay.user_id == user.id,
+                               StudyDay.local_date.in_([FRIDAY, SATURDAY]))
+    ).scalars().all()
+    assert [d.required_units for d in days] == [2, 2]
+
+
+def test_skipping_shabbat_on_a_seven_day_week_is_a_plain_miss(session, user):
+    log(session, user, 2, at(FRIDAY, 10))
+    settle(session, user, at(SATURDAY + timedelta(days=1), 9))  # Shabbat skipped
+
+    stats = session.get(UserStats, user.id)
+    assert stats.current_streak == 0
+    assert statuses(session, user)[SATURDAY] == DayStatus.MISSED
+
+
+# --------------------------------------------------------------------------- #
+# The five-day week
+# --------------------------------------------------------------------------- #
+
+
+def test_the_rest_days_ask_for_nothing_and_hold_the_streak(session, five_day_user):
+    user = five_day_user
+    for offset in range(5):  # Sun-Thu
+        log(session, user, 2, at(SUNDAY + timedelta(days=offset), 9))
+
     stats = session.get(UserStats, user.id)
     points_before, streak_before = stats.total_points, stats.current_streak
 
-    # Off-device all Shabbat, never reports, resumes Sunday as normal.
+    # Away all weekend, back on Sunday.
     log(session, user, 2, at(SATURDAY + timedelta(days=1), 9))
-    # Monday: the report window has closed, so Fri/Sat finalise.
-    settle(session, user, at(SATURDAY + timedelta(days=2), 9))
 
     session.refresh(stats)
     assert stats.current_streak == streak_before + 1, (
-        "Shabbat held the streak; Sunday advanced it. A break would have "
-        "restarted the count at 1."
+        "the rest days held the streak; Sunday advanced it. A break would "
+        "have restarted the count at 1."
     )
     assert stats.total_points == points_before + 15, "Sunday paid, nothing deducted"
 
-    statuses = {
-        d.local_date: d.status
-        for d in session.execute(
-            select(StudyDay).where(StudyDay.user_id == user.id)
-        ).scalars()
-    }
-    assert statuses[FRIDAY] == DayStatus.SHABBAT_UNREPORTED
-    assert statuses[SATURDAY] == DayStatus.SHABBAT_UNREPORTED
+    resolved = statuses(session, user)
+    assert resolved[FRIDAY] == DayStatus.REST_DAY
+    assert resolved[SATURDAY] == DayStatus.REST_DAY
 
 
-def test_a_plain_weekday_miss_still_breaks_the_streak_after_shabbat(session, user):
-    """The Shabbat exemption is scoped to Shabbat. Skipping Sunday is a miss
-    like any other - otherwise the freeze would leak into the whole weekend."""
-    for offset in range(4):
-        log(session, user, 2, at(MONDAY + timedelta(days=offset), 9))
+def test_a_weekday_miss_still_breaks_the_streak_on_a_five_day_week(session, five_day_user):
+    """The exemption is scoped to the rest days. Skipping Sunday is a miss like
+    any other - otherwise the whole weekend would leak into the week."""
+    user = five_day_user
+    for offset in range(5):
+        log(session, user, 2, at(SUNDAY + timedelta(days=offset), 9))
 
     settle(session, user, at(SATURDAY + timedelta(days=2), 9))  # Sunday skipped
 
@@ -212,89 +252,37 @@ def test_a_plain_weekday_miss_still_breaks_the_streak_after_shabbat(session, use
     assert stats.current_streak == 0
 
 
-# --------------------------------------------------------------------------- #
-# Spec 3.2 - the penalty timer pauses
-# --------------------------------------------------------------------------- #
+def test_learning_on_a_rest_day_anyway_still_counts(session, five_day_user):
+    """A rest day requires nothing, but it is not closed. Someone who turns up
+    on Shabbat should be rewarded for it, not told the day does not count."""
+    user = five_day_user
+    for offset in range(5):  # Sun-Thu -> streak 5
+        log(session, user, 2, at(SUNDAY + timedelta(days=offset), 9))
+
+    result = log(session, user, 2, at(SATURDAY, 20))
+    assert result.day_completed
+    assert result.streak == 6, "Friday held it at 5, Shabbat advanced it"
+    assert statuses(session, user)[SATURDAY] == DayStatus.COMPLETED
 
 
-def test_thursdays_miss_is_not_judged_during_the_shabbat_window(session, user):
-    log(session, user, 2, at(MONDAY, 9))
-    # Thursday goes unfinished. Settle at Friday 18:30, inside the window.
-    outcome = settle(session, user, at(FRIDAY, 18, 30))
+def test_switching_to_a_five_day_week_reclassifies_today(session, user):
+    from app.services import progress
 
-    stats = session.get(UserStats, user.id)
-    assert stats.total_points == 10, "no penalty charged inside the window"
-    assert outcome.stopped_reason and "deferred" in outcome.stopped_reason
+    settle(session, user, at(FRIDAY, 9))
+    assert statuses(session, user)[FRIDAY] == DayStatus.PENDING
 
-
-# --------------------------------------------------------------------------- #
-# Spec 3.5 / 3.6 / 3.7 - the Motzash report
-# --------------------------------------------------------------------------- #
-
-
-def test_motzash_report_credits_both_days_in_order(session, user):
-    for offset in range(4):  # Mon-Thu -> streak 4
-        log(session, user, 2, at(MONDAY + timedelta(days=offset), 9))
-    points_before = session.get(UserStats, user.id).total_points  # 45
-
-    result = study.report_shabbat(session, user, now=at(SATURDAY, 21, 0))
-
-    # Streak was 4, so Friday scores as day 5 and Shabbat as day 6 - both at
-    # the 1.5x tier. Order matters: crediting Shabbat first would pay the same
-    # here but not at a tier boundary.
-    assert result.friday_points == 15
-    assert result.shabbat_points == 15
-    assert result.motash_bonus == 5, "reported before local midnight"
-    assert result.streak == 6
-
-    stats = session.get(UserStats, user.id)
-    assert stats.total_points == points_before + 35
-
-
-def test_reporting_after_midnight_forfeits_only_the_bonus(session, user):
-    log(session, user, 2, at(MONDAY, 9))
-    result = study.report_shabbat(session, user, now=at(SATURDAY + timedelta(days=1), 10))
-
-    assert result.motash_bonus == 0
-    assert result.friday_points > 0 and result.shabbat_points > 0
-
-
-def test_the_report_advances_the_reading_cursor_by_the_double_portion(session, user):
+    user.study_week = StudyWeek.FIVE_DAYS
     plan = session.execute(
         select(StudyPlan).where(StudyPlan.user_id == user.id)
     ).scalar_one()
-    before = plan.current_ordinal
+    progress.change_goal(session, user, plan, plan.daily_goal, FRIDAY)
+    session.flush()
 
-    result = study.report_shabbat(session, user, now=at(SATURDAY, 21))
-    session.refresh(plan)
-
-    assert result.units_credited == 4  # 2 x daily_goal
-    assert plan.current_ordinal == before + 4
-
-
-def test_logging_the_double_portion_on_friday_needs_no_checkbox(session, user):
-    result = log(session, user, 4, at(FRIDAY, 10))
-    assert result.day_completed, "4 units meets Friday's doubled requirement"
-    streak_after_friday = result.streak
-
-    # Settle on Sunday - Shabbat credits off the logged double portion without
-    # waiting for the report deadline, because the work is already recorded.
-    settle(session, user, at(SATURDAY + timedelta(days=1), 9))
-
-    stats = session.get(UserStats, user.id)
-    assert stats.current_streak == streak_after_friday + 1, "Shabbat credited too"
-
-
-def test_reporting_before_havdalah_is_rejected(session, user):
-    with pytest.raises(study.StudyError) as exc:
-        study.report_shabbat(session, user, now=at(SATURDAY, 15))
-    assert exc.value.code == "shabbat_not_over"
-
-
-def test_the_report_window_closes_after_the_grace_period(session, user):
-    with pytest.raises(study.StudyError) as exc:
-        study.report_shabbat(session, user, now=at(SATURDAY + timedelta(days=3), 10))
-    assert exc.value.code == "report_window_closed"
+    day = session.execute(
+        select(StudyDay).where(StudyDay.user_id == user.id,
+                               StudyDay.local_date == FRIDAY)
+    ).scalar_one()
+    assert day.required_units == 0, "today stopped asking for anything"
 
 
 # --------------------------------------------------------------------------- #

@@ -7,17 +7,15 @@ rules testable without spinning up an app.
 
 from __future__ import annotations
 
-import logging
 from dataclasses import asdict
 from datetime import date
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, HTTPException, Request, Response
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select
 
 from app.api.deps import CurrentUser, DbSession, IdempotencyKey
 from app.core.security import AuthError, exchange_code, issue_tokens, rotate_refresh_token, upsert_user
-from app.core import clock
 from app.models import (
     Mishnah,
     PlanStatus,
@@ -26,6 +24,7 @@ from app.models import (
     ShopItem,
     StudyDay,
     StudyPlan,
+    StudyWeek,
     Tractate,
     UserInventory,
 )
@@ -82,6 +81,101 @@ async def google_login(payload: GoogleLoginIn, session: DbSession) -> TokenOut:
         expires_in=pair.expires_in,
         is_new_user=existed is None,
     )
+
+
+# --------------------------------------------------------------------------- #
+# Email + password
+# --------------------------------------------------------------------------- #
+
+
+class CredentialsIn(BaseModel):
+    email: EmailStr
+    password: str
+    timezone: str = "Asia/Jerusalem"
+    display_name: str | None = None
+
+
+def _issue(session, response: Response, user, request: Request) -> TokenOut:
+    """Same session mechanism the Google flow uses: refresh token in an
+    HttpOnly cookie, short-lived access token in the body."""
+    from app.api.auth_google import set_refresh_cookie
+
+    pair = issue_tokens(session, user, request.headers.get("user-agent"))
+    set_refresh_cookie(response, pair.refresh_token)
+    return TokenOut(
+        access_token=pair.access_token,
+        refresh_token=pair.refresh_token,
+        expires_in=pair.expires_in,
+    )
+
+
+@router.post("/auth/register", response_model=TokenOut, status_code=201)
+def register(
+    payload: CredentialsIn, request: Request, response: Response, session: DbSession
+) -> TokenOut:
+    from app.core.security import MIN_PASSWORD_LENGTH, hash_password
+    from app.models import User, UserStats
+
+    if len(payload.password) < MIN_PASSWORD_LENGTH:
+        raise HTTPException(400, {
+            "code": "password_too_short",
+            "message": f"הסיסמה צריכה להיות באורך {MIN_PASSWORD_LENGTH} תווים לפחות",
+        })
+
+    email = payload.email.strip().lower()
+    # Checked against *every* account, not just password ones: someone who
+    # signed in with Google and then registers the same address would get a
+    # second, separate account and quietly lose their streak.
+    if session.execute(
+        select(User.id).where(func.lower(User.email) == email)
+    ).scalar_one_or_none():
+        raise HTTPException(409, {
+            "code": "email_taken",
+            "message": "כתובת המייל הזו כבר רשומה",
+        })
+
+    user = User(
+        email=email,
+        email_verified=False,
+        display_name=payload.display_name or email.split("@")[0],
+        password_hash=hash_password(payload.password),
+        timezone=payload.timezone,
+    )
+    session.add(user)
+    session.flush()
+    session.add(UserStats(user_id=user.id))
+    session.flush()
+
+    out = _issue(session, response, user, request)
+    out.is_new_user = True
+    return out
+
+
+@router.post("/auth/login", response_model=TokenOut)
+def login(
+    payload: CredentialsIn, request: Request, response: Response, session: DbSession
+) -> TokenOut:
+    from app.core.security import verify_password
+    from app.models import User
+
+    user = session.execute(
+        select(User).where(
+            func.lower(User.email) == payload.email.strip().lower(),
+            User.password_hash.is_not(None),
+            User.deleted_at.is_(None),
+        )
+    ).scalar_one_or_none()
+
+    # One message for "no such account" and "wrong password" alike: telling
+    # them apart turns the login form into a list of who has an account here.
+    # `verify_password` spends the same time either way.
+    if not verify_password(payload.password, user.password_hash if user else None):
+        raise HTTPException(401, {
+            "code": "bad_credentials",
+            "message": "אימייל או סיסמה שגויים",
+        })
+
+    return _issue(session, response, user, request)
 
 
 class RefreshIn(BaseModel):
@@ -141,22 +235,48 @@ def logout(request: Request, response: Response, session: DbSession) -> dict:
 # --------------------------------------------------------------------------- #
 
 
+@router.get("/me")
+def me(user: CurrentUser) -> dict:
+    return {
+        "email": user.email,
+        "display_name": user.display_name,
+        "timezone": user.timezone,
+        "study_week": user.study_week,
+        "sign_in": "google" if user.google_sub else "password",
+    }
+
+
 class PreferencesIn(BaseModel):
-    timezone: str
-    latitude: float | None = None
-    longitude: float | None = None
-    in_israel: bool = True
-    observes_shabbat: bool = True
+    timezone: str | None = None
+    study_week: StudyWeek | None = None
 
 
 @router.put("/me/preferences")
-def set_preferences(payload: PreferencesIn, user: CurrentUser) -> dict:
-    user.timezone = payload.timezone
-    user.latitude = payload.latitude
-    user.longitude = payload.longitude
-    user.in_israel = payload.in_israel
-    user.observes_shabbat = payload.observes_shabbat
-    return {"ok": True}
+def set_preferences(
+    payload: PreferencesIn, user: CurrentUser, session: DbSession
+) -> dict:
+    """Both fields change which dates carry a quota, so today's open row and
+    the completion estimate are refreshed here rather than at the next
+    settlement - the learner should see the effect on the screen they set it
+    from."""
+    if payload.timezone is not None:
+        user.timezone = payload.timezone
+    if payload.study_week is not None:
+        user.study_week = payload.study_week
+
+    estimated_end_date = None
+    plan = _current_plan(session, user)
+    if plan is not None:
+        projection = progress.change_goal(
+            session, user, plan, plan.daily_goal, study.local_today(user)
+        )
+        estimated_end_date = projection.estimated_end_date
+
+    return {
+        "timezone": user.timezone,
+        "study_week": user.study_week,
+        "estimated_end_date": estimated_end_date,
+    }
 
 
 class PlanIn(BaseModel):
@@ -241,21 +361,6 @@ def log_study(
         result = study.log_study(
             session, user, payload.units, idempotency_key=idempotency_key
         )
-    except StudyError as exc:
-        raise _handle(exc)
-    return asdict(result)
-
-
-class ShabbatReportIn(BaseModel):
-    completed: bool = True
-
-
-@router.post("/study/shabbat-report")
-def shabbat_report(
-    payload: ShabbatReportIn, user: CurrentUser, session: DbSession
-) -> dict:
-    try:
-        result = study.report_shabbat(session, user, completed=payload.completed)
     except StudyError as exc:
         raise _handle(exc)
     return asdict(result)
@@ -384,20 +489,19 @@ def _portion_ordinals(session, plan, day) -> list[int]:
     ).scalar_one()
     start = plan.current_ordinal - int(logged_today) + 1
 
-    # How many to show. Normally today's requirement — but if the day row was
-    # opened under a previous plan (the learner switched tractate today) it
-    # carries that plan's quota, so fall back to the current goal rather than
-    # previewing the wrong number of mishnayot from the new tractate.
-    count = day.required_units if day.plan_id == plan.id else plan.daily_goal
-    return [start + offset for offset in range(count)]
+    # How many to show. Normally today's requirement — but a rest day requires
+    # nothing and still deserves a portion on screen, because reading it is
+    # optional, not forbidden. And if the day row was opened under a previous
+    # plan (the learner switched tractate today) it carries that plan's quota,
+    # so fall back to the current goal rather than previewing the wrong number
+    # of mishnayot from the new tractate.
+    count = day.required_units if day.plan_id == plan.id else 0
+    return [start + offset for offset in range(count or plan.daily_goal)]
 
 
 @router.get("/study/portion")
 def study_portion(
-    user: CurrentUser,
-    session: DbSession,
-    background: BackgroundTasks,
-    commentaries: bool = True,
+    user: CurrentUser, session: DbSession, commentaries: bool = True
 ) -> dict:
     """Today's mishnayot, with text and commentaries."""
     try:
@@ -418,41 +522,23 @@ def study_portion(
         )
     ).scalar_one()
 
-    # Settlement above may have created day rows, so this request is holding a
-    # write transaction. Assembling the portion then makes up to sixteen
-    # network round trips - and on SQLite a write lock held across those makes
-    # every concurrent write in the process fail. Commit the business work
-    # first; the text fetches below persist through their own short
-    # transactions and need nothing from this one.
-    session.commit()
-
     items = []
     for ordinal in _portion_ordinals(session, plan, day):
         if ordinal < 1 or ordinal > tractate.mishnayot_count:
             continue
-        view = texts.get_mishnah(
-            session, tractate, ordinal, with_commentaries=commentaries
-        )
+        view = texts.get_mishnah(tractate, ordinal, with_commentaries=commentaries)
         if view is None:
             continue
         payload = texts.as_dict(view)
         payload["done"] = ordinal <= plan.current_ordinal
         items.append(payload)
 
-    # Warm tomorrow's portion so the next open is instant.
-    next_start = plan.current_ordinal + 1
-    background.add_task(
-        _prefetch_later,
-        tractate.id,
-        [next_start + i for i in range(plan.daily_goal * 2)],
-    )
-
     return {
         "local_date": state["local_date"],
         "tractate": tractate.name_he,
         "required_units": day.required_units,
         "completed_units": day.completed_units,
-        "is_double_portion": state["is_double_portion"],
+        "is_rest_day": state["is_rest_day"],
         "status": day.status,
         "mishnayot": items,
     }
@@ -472,9 +558,7 @@ def single_mishnah(
         raise HTTPException(409, {"code": "no_active_plan"})
 
     tractate = session.get(Tractate, plan.tractate_id)
-    view = texts.get_mishnah(
-        session, tractate, ordinal, with_commentaries=commentaries
-    )
+    view = texts.get_mishnah(tractate, ordinal, with_commentaries=commentaries)
     if view is None:
         raise HTTPException(404, {"code": "no_such_mishnah"})
 
@@ -482,22 +566,6 @@ def single_mishnah(
     payload["done"] = ordinal <= plan.current_ordinal
     payload["total"] = tractate.mishnayot_count
     return payload
-
-
-def _prefetch_later(tractate_id: int, ordinals: list[int]) -> None:
-    """Runs after the response is sent, in its own session."""
-    from app.db.session import SessionLocal
-
-    try:
-        with SessionLocal() as session:
-            tractate = session.get(Tractate, tractate_id)
-            if tractate is None:
-                return
-            texts.prefetch(session, tractate, ordinals)
-    except Exception:
-        # Warming the cache is an optimisation. It must never surface to the
-        # user, and it must never poison a request that already succeeded.
-        logging.getLogger(__name__).warning("prefetch task failed", exc_info=True)
 
 
 # --------------------------------------------------------------------------- #
@@ -564,7 +632,7 @@ def update_current_plan(
             )
         goal = payload.daily_goal or plan.daily_goal
         projection = progress.change_goal(
-            session, user, plan, goal, clock.now().date()
+            session, user, plan, goal, study.local_today(user)
         )
     except StudyError as exc:
         raise _handle(exc)

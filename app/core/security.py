@@ -1,12 +1,15 @@
-"""Token issuing and Google identity verification."""
+"""Password hashing, token issuing, and Google identity verification."""
 
 from __future__ import annotations
 
+import base64
 import hashlib
+import hmac
 import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 
 import jwt
 from sqlalchemy import select
@@ -37,6 +40,85 @@ class AuthError(Exception):
         super().__init__(message)
         self.code = code
         self.status_code = status_code
+
+
+# --------------------------------------------------------------------------- #
+# Passwords
+# --------------------------------------------------------------------------- #
+
+#: scrypt (RFC 7914) from the standard library, rather than bcrypt or argon2
+#: from a compiled wheel. It is memory-hard, it is what `hashlib` gives you for
+#: free, and it keeps this app installable with no build toolchain.
+#:
+#: n=2**14 with r=8 is 16 MB and ~100ms per hash - the RFC's interactive
+#: parameter, slow enough to make an offline attack on a leaked database
+#: expensive and fast enough that nobody notices it on a login. Going higher
+#: needs an explicit `maxmem`: OpenSSL refuses anything over 32 MB by default,
+#: so n=2**15 raises "memory limit exceeded" rather than being merely slower.
+SCRYPT_N = 2**14
+SCRYPT_R = 8
+SCRYPT_P = 1
+SALT_BYTES = 16
+MIN_PASSWORD_LENGTH = 8
+
+
+def hash_password(password: str) -> str:
+    """`scrypt$n$r$p$salt$hash`, all base64. The parameters travel with the
+    digest so they can be raised later without invalidating existing ones."""
+    salt = secrets.token_bytes(SALT_BYTES)
+    digest = hashlib.scrypt(
+        password.encode("utf-8"), salt=salt,
+        n=SCRYPT_N, r=SCRYPT_R, p=SCRYPT_P, dklen=32,
+    )
+    encode = lambda raw: base64.b64encode(raw).decode()  # noqa: E731
+    return f"scrypt${SCRYPT_N}${SCRYPT_R}${SCRYPT_P}${encode(salt)}${encode(digest)}"
+
+
+def _as_utc(moment: datetime) -> datetime:
+    """Read a stored instant back as timezone-aware.
+
+    Everything is written as aware UTC, but SQLite has no timezone type and
+    hands the value back naive - so comparing it against `now()` raises
+    TypeError instead of answering the question. Postgres does not have this
+    problem, which is exactly why it is worth pinning: the failure only ever
+    shows up in development, on the refresh path, after the access token has
+    been dropped.
+    """
+    return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
+
+
+@lru_cache(maxsize=1)
+def _dummy_hash() -> str:
+    """A hash of a value nobody knows, used to spend the same time on a login
+    for an address that has no account. Built lazily so the ~0.3s of scrypt is
+    not paid at import time by processes that never see a login."""
+    return hash_password(secrets.token_urlsafe(32))
+
+
+def verify_password(password: str, stored: str | None) -> bool:
+    """Constant-time check. False for an account with no password at all, so a
+    Google-only account cannot be signed into with an empty string.
+
+    A missing hash still does the work against a dummy: returning early would
+    make "no such account" measurably faster than "wrong password", which turns
+    the login form into an oracle for who has an account here.
+    """
+    if not stored:
+        verify_password(password, _dummy_hash())
+        return False
+    try:
+        scheme, n, r, p, salt_b64, digest_b64 = stored.split("$")
+        if scheme != "scrypt":
+            return False
+        candidate = hashlib.scrypt(
+            password.encode("utf-8"),
+            salt=base64.b64decode(salt_b64),
+            n=int(n), r=int(r), p=int(p),
+            dklen=len(base64.b64decode(digest_b64)),
+        )
+    except (ValueError, TypeError):
+        return False
+    return hmac.compare_digest(candidate, base64.b64decode(digest_b64))
 
 
 # --------------------------------------------------------------------------- #
@@ -181,7 +263,7 @@ def rotate_refresh_token(
             .values(revoked_at=now)
         )
         raise AuthError("refresh_reuse", "refresh token replay detected; re-login")
-    if record.expires_at <= now:
+    if _as_utc(record.expires_at) <= now:
         raise AuthError("expired_refresh", "refresh token expired")
 
     user = session.get(User, record.user_id)

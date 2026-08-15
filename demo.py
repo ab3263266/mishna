@@ -10,24 +10,13 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from app.services.calendar import UserClock, classify_day, required_units_for
+from app.models import StudyWeek
+from app.services.calendar import classify_day, required_units_for
 from app.services.progress import project_completion
 from app.services.scoring import ScoringRules, penalty_for_miss, points_for_completion
-from app.services.zmanim import (
-    CANDLE_OFFSET_BY_CITY,
-    FixedClockProvider,
-    Location,
-    ZmanimLibraryProvider,
-)
+from app.services.texts import COMMENTATORS, available_tractates, get_mishnah
 
 RULES = ScoringRules()
-JERUSALEM = Location(
-    timezone="Asia/Jerusalem",
-    latitude=31.7683,
-    longitude=35.2137,
-    in_israel=True,
-    candle_lighting_offset=CANDLE_OFFSET_BY_CITY["jerusalem"],
-)
 SUNDAY = date(2026, 8, 9)
 
 
@@ -53,98 +42,71 @@ def scoring_curve() -> None:
 
 
 def the_week() -> None:
-    rule("2. A week for a Jerusalem user, daily_goal = 2")
-    provider = ZmanimLibraryProvider(pre_freeze_minutes=60)
-    print(f"  {'date':<12} {'day':<4} {'kind':<14} {'must log':>9}   note")
+    rule("2. The two week modes, daily_goal = 2")
+    print(f"  {'date':<12} {'day':<4} {'7-day':>7} {'5-day':>7}   note")
 
-    total = 0
+    totals = {StudyWeek.SEVEN_DAYS: 0, StudyWeek.FIVE_DAYS: 0}
     for offset in range(7):
         d = SUNDAY + timedelta(days=offset)
-        kind = classify_day(d, JERUSALEM, observes_shabbat=True, observes_yom_tov=True)
-        req = required_units_for(kind, 2)
-        total += req
-        note = ""
-        if kind.value == "erev_shabbat":
-            note = "DOUBLE PORTION unlocks 00:00"
-        elif kind.value == "shabbat":
-            note = "quota already covered Friday"
-        print(f"  {d.isoformat():<12} {d.strftime('%a'):<4} {kind.value:<14} {req:>9}   {note}")
+        required = {}
+        for mode in totals:
+            required[mode] = required_units_for(classify_day(d, mode), 2)
+            totals[mode] += required[mode]
+        note = "rest day on the 5-day plan" if not required[StudyWeek.FIVE_DAYS] else ""
+        print(f"  {d.isoformat():<12} {d.strftime('%a'):<4} "
+              f"{required[StudyWeek.SEVEN_DAYS]:>7} {required[StudyWeek.FIVE_DAYS]:>7}   {note}")
 
-    print(f"\n  Weekly total: {total} mishnayot = daily_goal x 7. "
-          f"The portion is moved, not duplicated.")
-
-    friday = SUNDAY + timedelta(days=5)
-    window = provider.shabbat_window(friday, JERUSALEM)
-    clock = UserClock.for_location(JERUSALEM, rollover_hour=3)
-    print(f"\n  Real zmanim for {friday} (Jerusalem, {JERUSALEM.candle_lighting_offset}-min custom):")
-    print(f"    penalties pause   {window.freeze_start.strftime('%a %H:%M')}")
-    print(f"    candle lighting   {window.onset.strftime('%a %H:%M')}")
-    print(f"    havdalah          {window.end.strftime('%a %H:%M')}   <- report window opens")
-    print(f"    Motash bonus by   {clock.civil_midnight(friday + timedelta(days=1)).strftime('%a %H:%M')}")
+    print(f"\n  Weekly totals: {totals[StudyWeek.SEVEN_DAYS]} vs "
+          f"{totals[StudyWeek.FIVE_DAYS]} mishnayot.")
+    print("  Nothing is carried over: the shorter week learns less, it does not")
+    print("  cram the same quota into five days.")
 
 
-def shabbat_paths() -> None:
-    rule("3. Four ways through a Shabbat, arriving with a streak of 4")
-    streak = 4
-    friday = points_for_completion(RULES, streak + 1)
-    shabbat = points_for_completion(RULES, streak + 2)
-    pair = friday + shabbat
-
+def rest_days() -> None:
+    rule("3. A rest day, arriving with a streak of 4")
     rows = [
-        ("logs double portion Friday morning", f"+{pair}", streak + 2, "no checkbox needed"),
-        ("checks the box Motzash", f"+{pair + RULES.motash_bonus}", streak + 2, "includes Motash bonus"),
-        ("checks the box Sunday", f"+{pair}", streak + 2, "bonus forfeited"),
-        ("never reports", "0", streak, "streak HELD, no penalty"),
+        ("does not open the app", "0", 4, "streak HELD, no penalty"),
+        ("reads the portion anyway",
+         f"+{points_for_completion(RULES, 5)}", 5, "credited like any day"),
     ]
-    print(f"  {'what the user does':<36} {'points':>8} {'streak':>7}   note")
-    for what, pts, st, note in rows:
-        print(f"  {what:<36} {pts:>8} {st:>7}   {note}")
-
-    print(f"\n  Friday credits before Shabbat: {friday} then {shabbat} points.")
-    print("  Reversing that order underpays the user at every tier boundary.")
+    print(f"  {'what the user does':<28} {'points':>8} {'streak':>7}   note")
+    for what, pts, streak, note in rows:
+        print(f"  {what:<28} {pts:>8} {streak:>7}   {note}")
+    print("\n  A rest day is never punished, and never blocked either.")
 
 
 def estimate() -> None:
     rule("4. Completion estimate - Berakhot, 57 mishnayot")
     for goal in (1, 2, 3, 5):
-        p = project_completion(
-            remaining_units=57,
-            daily_goal=goal,
-            start_date=SUNDAY,
-            location=JERUSALEM,
-            observes_shabbat=True,
-            observes_yom_tov=True,
-        )
-        print(f"  {goal} per day -> finishes {p.estimated_end_date} "
-              f"({p.calendar_days:>3} calendar days, {p.study_days:>3} study days)")
-
-    slow = project_completion(
-        remaining_units=57, daily_goal=2, start_date=SUNDAY, location=JERUSALEM,
-        observes_shabbat=True, observes_yom_tov=True, credits_shabbat=False,
-    )
-    fast = project_completion(
-        remaining_units=57, daily_goal=2, start_date=SUNDAY, location=JERUSALEM,
-        observes_shabbat=True, observes_yom_tov=True,
-    )
-    print(f"\n  Skipping the double portion: {fast.estimated_end_date} -> "
-          f"{slow.estimated_end_date} ({(slow.estimated_end_date - fast.estimated_end_date).days} days later)")
+        row = []
+        for mode in (StudyWeek.SEVEN_DAYS, StudyWeek.FIVE_DAYS):
+            p = project_completion(
+                remaining_units=57, daily_goal=goal, start_date=SUNDAY,
+                study_week=mode,
+            )
+            row.append(f"{p.estimated_end_date} ({p.calendar_days:>3}d)")
+        print(f"  {goal} per day -> 7-day week {row[0]}   5-day week {row[1]}")
 
 
-def fallback() -> None:
-    rule("5. Fallback provider - no coordinates, no zmanim library")
-    window = FixedClockProvider().shabbat_window(
-        SUNDAY + timedelta(days=5), Location(timezone="Asia/Jerusalem")
-    )
-    print(f"  fixed clock: {window.freeze_start.strftime('%a %H:%M')} -> "
-          f"{window.end.strftime('%a %H:%M')}")
-    print("  Always available, deliberately approximate. Not a default for")
-    print("  observant users - verify real zmanim against a published luach.")
+def the_text() -> None:
+    rule("5. The text - read from disk, never from the network")
+    print(f"  {len(available_tractates())} tractates on disk, "
+          f"{len(COMMENTATORS)} commentaries each")
+
+    class _T:
+        slug, name_he = "berakhot", "ברכות"
+
+    view = get_mishnah(_T(), 1)
+    print(f"\n  {view.ref} ({view.text.license}, {view.text.version_title})")
+    print(f"    {view.text.body[:64]}...")
+    for passage in view.commentaries:
+        print(f"    {passage.title:<24} {len(passage.body):>6} chars  {passage.license}")
 
 
 if __name__ == "__main__":
     scoring_curve()
     the_week()
-    shabbat_paths()
+    rest_days()
     estimate()
-    fallback()
+    the_text()
     print()

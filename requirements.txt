@@ -5,6 +5,8 @@ fastapi==0.115.6
 uvicorn[standard]==0.34.0
 pydantic==2.10.4
 pydantic-settings==2.7.0
+# Backs pydantic's EmailStr on the registration form. Pure Python.
+email-validator==2.2.0
 
 # Windows and slim Linux images ship no system tz database, and every day
 # boundary in this app is computed with ZoneInfo. Without it the app raises
@@ -18,16 +20,12 @@ alembic==1.14.0
 
 # Auth
 google-auth==2.37.0
-httpx==0.28.1
 PyJWT==2.10.1
 
-# Jewish calendar / zmanim.
-# `zmanim` is a Python port of KosherJava (sunset, candle lighting, tzeis).
-# `pyluach` handles Hebrew dates and festivals.
-# Both are optional at runtime - services/zmanim.py falls back to fixed local
-# clock times if they are not installed, so the app still boots without them.
-zmanim==0.3.2
-pyluach==2.2.0
+# HTTP client. Used by the Google token exchange at runtime, and by
+# scripts/fetch_texts.py to download the corpus - which is a one-off, so
+# nothing on a request path talks to the network except Google.
+httpx==0.28.1
 
 # Dev
 pytest==8.3.4

@@ -8,7 +8,7 @@
   :root{
     --bg:#f7f4ec; --card:#fffdf7; --ink:#1f1a12; --muted:#7d7264;
     --line:#e6ddc9; --accent:#8b5e34; --accent-ink:#fff; --rule:#d9cdb4;
-    --good:#2e7d52; --bad:#c0392b; --freeze:#2b7bb9; --shabbat:#7a52a8;
+    --good:#2e7d52; --bad:#c0392b; --freeze:#2b7bb9; --rest:#7a52a8;
     --shadow:0 1px 2px rgba(60,40,10,.05),0 10px 30px rgba(60,40,10,.06);
   }
   @media (prefers-color-scheme:dark){
@@ -75,8 +75,16 @@
   summary .lic{margin-inline-start:auto;font-size:10.5px;font-weight:500;color:var(--muted)}
   .comm-body{padding:2px 2px 15px;font-family:"Frank Ruhl Libre","David Libre",serif;
              font-size:18px;line-height:1.95;text-align:justify}
-  .comm-body[lang=en]{font-family:Georgia,serif;font-size:16px;direction:ltr;text-align:left}
-  .comm-body b{color:var(--accent)}
+  /* The dibur hamatchil. Sefaria marks the opening lemma of each comment with
+     <b>, and it is the thing you scan for: it tells you which words of the
+     mishnah this passage is on. Tinting it turns a wall of justified Hebrew
+     into something you can navigate. box-decoration-break keeps the tint on
+     both halves of a lemma that wraps across a line instead of stretching one
+     box across the gap. */
+  .comm-body b{color:var(--accent);font-weight:700;
+               background:color-mix(in srgb,var(--accent) 13%,transparent);
+               border-radius:4px;padding:1px 4px;
+               -webkit-box-decoration-break:clone;box-decoration-break:clone}
 
   .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
         padding:20px;margin-bottom:14px;box-shadow:var(--shadow)}
@@ -106,8 +114,8 @@
   .nav .grow{flex:1}
 
   .banner{border-radius:11px;padding:13px 15px;margin-bottom:14px;font-size:14px;border:1px solid transparent}
-  .banner.shabbat{background:color-mix(in srgb,var(--shabbat) 12%,transparent);
-                  border-color:color-mix(in srgb,var(--shabbat) 35%,transparent)}
+  .banner.rest{background:color-mix(in srgb,var(--rest) 12%,transparent);
+               border-color:color-mix(in srgb,var(--rest) 35%,transparent)}
   .banner.freeze{background:color-mix(in srgb,var(--freeze) 12%,transparent);
                  border-color:color-mix(in srgb,var(--freeze) 35%,transparent)}
   .banner b{display:block;margin-bottom:2px}
@@ -118,7 +126,7 @@
   .day.completed{background:var(--good);color:#fff}
   .day.missed{background:var(--bad);color:#fff}
   .day.frozen_item{background:var(--freeze);color:#fff}
-  .day.shabbat_unreported,.day.shabbat_pending{background:var(--shabbat);color:#fff;opacity:.75}
+  .day.rest_day{background:var(--rest);color:#fff;opacity:.75}
 
   .actions{position:fixed;inset-inline:0;bottom:42px;z-index:35;padding:0 16px;pointer-events:none}
   .actions .inner{max-width:760px;margin:0 auto;pointer-events:auto}
@@ -137,6 +145,10 @@
   .tag{font-size:10px;background:var(--accent);color:var(--accent-ink);
        padding:2px 6px;border-radius:4px;font-weight:700}
   .spinner{text-align:center;padding:50px 0;color:var(--muted)}
+  .or{display:flex;align-items:center;gap:11px;margin:20px 0 4px;
+      color:var(--muted);font-size:12px}
+  .or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
+  #pw-hint.bad{color:var(--bad)}
 </style>
 </head>
 <body>
@@ -148,27 +160,45 @@
       <p class="sub">לימוד משנה יומי — הטקסט, הפירושים, ומעקב.</p>
       <div id="auth-error" class="hidden" style="margin-bottom:14px"></div>
 
+      <div id="password-login" class="hidden">
+        <label for="pw-email">אימייל</label>
+        <input id="pw-email" class="full" type="email" autocomplete="username"
+               placeholder="you@example.com"
+               onkeydown="if(event.key==='Enter')submitCredentials()">
+
+        <label for="pw-password">סיסמה</label>
+        <input id="pw-password" class="full" type="password"
+               autocomplete="current-password"
+               onkeydown="if(event.key==='Enter')submitCredentials()">
+        <p class="sub" id="pw-hint" style="margin-top:6px"></p>
+
+        <button class="primary wide" style="margin-top:16px"
+                id="pw-submit" onclick="submitCredentials()">כניסה</button>
+
+        <p class="sub" style="margin-top:13px;text-align:center">
+          <span id="pw-switch-text">אין לך חשבון?</span>
+          <a href="#" id="pw-switch" onclick="togglePasswordMode();return false">הרשמה</a>
+        </p>
+      </div>
+
       <div id="google-login" class="hidden">
-        <button class="primary wide" onclick="location.href='/api/v1/auth/google/login?tz='+encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)">
+        <div class="or"><span>או</span></div>
+        <button class="wide" onclick="location.href='/api/v1/auth/google/login?tz='+encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)">
           התחברות עם Google
         </button>
       </div>
 
       <div id="dev-login" class="hidden">
+        <div class="or"><span>פיתוח</span></div>
         <label for="email">אימייל</label>
         <input id="email" class="full" value="demo@example.com" autocomplete="off">
-        <label for="shabbat-mode">שמירת שבת</label>
-        <select id="shabbat-mode" class="full">
-          <option value="1">כן — הפעל מצב שבת</option>
-          <option value="0">לא</option>
-        </select>
         <div class="row" style="margin-top:18px">
-          <button class="primary wide" onclick="devLogin()">כניסת פיתוח</button>
+          <button class="wide" onclick="devLogin()">כניסת פיתוח</button>
         </div>
       </div>
 
       <p id="no-login" class="sub hidden" style="margin-top:16px">
-        ההתחברות אינה מוגדרת בשרת. יש להגדיר <code>GOOGLE_CLIENT_ID</code>.
+        ההתחברות אינה מוגדרת בשרת.
       </p>
     </div>
   </section>
@@ -192,6 +222,13 @@
         <option>1</option><option selected>2</option><option>3</option>
         <option>4</option><option>5</option><option>10</option>
       </select>
+
+      <label for="ob-week">כמה ימים בשבוע</label>
+      <select id="ob-week" class="full" onchange="obPreview()">
+        <option value="seven_days">7 ימים — כל יום, כולל שישי ושבת</option>
+        <option value="five_days">5 ימים — ראשון עד חמישי</option>
+      </select>
+      <p class="sub" style="margin-top:6px">אפשר לשנות את זה בהמשך בהגדרות.</p>
 
       <div id="ob-preview" class="hint" style="margin-top:16px"></div>
       <button class="primary wide" onclick="createPlan()">התחל ללמוד</button>
@@ -219,11 +256,6 @@
       <div id="banners"></div>
       <div class="hint" id="today-hint"></div>
       <div id="portion"><div class="spinner">טוען…</div></div>
-      <div id="shabbat-report" class="hidden">
-        <button class="primary wide" onclick="reportShabbat()">
-          ✓ למדתי את המנה הכפולה בשבת — קבל נקודות לשישי ולשבת
-        </button>
-      </div>
     </div>
 
     <!-- ===== BROWSE ===== -->
@@ -275,11 +307,25 @@
         <p class="sub" id="set-goal-preview" style="margin-top:8px"></p>
 
         <label>קפוץ למשנה אחרת במסכת</label>
-        <p class="sub">משנה מהיכן תמשיך לקרוא. ההיסטוריה, הנקודות והרצף לא משתנים.</p>
+        <p class="sub">משנה מהיכן תמשיך ללמוד. ההיסטוריה, הנקודות והרצף לא משתנים.</p>
         <div class="row">
           <select id="set-chapter" onchange="setChapterChanged()" style="flex:1"></select>
           <select id="set-mishnah" style="flex:1"></select>
           <button onclick="savePosition()">עבור לשם</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>מסלול הלימוד</h2>
+        <p class="sub">כמה ימים בשבוע אתה לומד. במסלול של חמישה ימים שישי ושבת פנויים —
+        אין מכסה, אין קנס, והרצף נשמר. מי שלומד בהם בכל זאת מקבל את היום.</p>
+        <label for="set-week">ימי לימוד בשבוע</label>
+        <div class="row">
+          <select id="set-week" style="flex:1">
+            <option value="seven_days">7 ימים — כל יום, כולל שישי ושבת</option>
+            <option value="five_days">5 ימים — ראשון עד חמישי</option>
+          </select>
+          <button class="primary" onclick="saveWeek()">שמור מסלול</button>
         </div>
       </div>
 
@@ -298,6 +344,14 @@
         </button>
       </div>
 
+      <div class="card">
+        <h2>החשבון</h2>
+        <p class="sub" id="set-account">—</p>
+        <button class="danger wide" style="margin-top:12px" onclick="logout()">
+          יציאה מהחשבון
+        </button>
+      </div>
+
       <details class="card">
         <summary style="font-size:16px">רצף, נקודות וחנות</summary>
         <div style="padding-top:10px">
@@ -306,7 +360,7 @@
           <div class="kv"><span>נקודות</span><span id="p-points">—</span></div>
           <div class="grid" id="history"></div>
           <p class="sub" style="margin-top:10px">
-            ירוק = הושלם · אדום = הוחמץ · כחול = הקפאה · סגול = שבת
+            ירוק = הושלם · אדום = הוחמץ · כחול = הקפאה · סגול = יום מנוחה
           </p>
           <div id="shop" style="margin-top:12px"></div>
         </div>
@@ -399,6 +453,15 @@ function renderMarkup(target, html){
   })(parsed.body.firstChild, target);
 }
 const NIKUD = /[֑-ׇ]/g;
+// Strip nikud from the text nodes only. Reassigning textContent on the whole
+// element would flatten it to a single text node - taking the <b> lemmas with
+// it, so turning nikud off used to erase every dibur hamatchil on the screen.
+function stripNikud(root){
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  for (const node of nodes) node.data = node.data.replace(NIKUD, "");
+}
 let nikudOn = localStorage.getItem("nikud") !== "0";
 function toggleNikud(){
   nikudOn = !nikudOn;
@@ -426,7 +489,7 @@ function mishnahCard(m, tractateName){
     const body = document.createElement("div");
     body.className = "text";
     renderMarkup(body, m.text.body);
-    if (!nikudOn) body.textContent = body.textContent.replace(NIKUD, "");
+    if (!nikudOn) stripNikud(body);
     card.appendChild(body);
     const src = document.createElement("div");
     src.className = "srcline";
@@ -453,9 +516,8 @@ function mishnahCard(m, tractateName){
       s.appendChild(lic); d.appendChild(s);
       const body = document.createElement("div");
       body.className = "comm-body";
-      if (c.language === "en") body.lang = "en";
       renderMarkup(body, c.body);
-      if (!nikudOn && c.language !== "en") body.textContent = body.textContent.replace(NIKUD,"");
+      if (!nikudOn) stripNikud(body);
       d.appendChild(body); comm.appendChild(d);
     });
     card.appendChild(comm);
@@ -512,34 +574,34 @@ function renderStrip(){
   document.getElementById("where").textContent =
     `${s.progress.tractate} · יום ${DAY_NAMES[d.getDay()]}`;
 
-  const b = [];
-  if (s.penalties_frozen)
-    b.push(`<div class="banner shabbat"><b>🕯️ מצב שבת פעיל</b>העונשים מוקפאים — לא תאבד רצף ולא נקודות.</div>`);
-  else if (s.is_double_portion)
-    b.push(`<div class="banner freeze"><b>📖 מנה כפולה</b>${s.required_units} משניות היום — של שישי ושל שבת יחד.</div>`);
-  if (s.can_report_shabbat)
-    b.push(`<div class="banner shabbat"><b>🌙 מוצאי שבת</b>דווח על הלימוד כדי לקבל את הנקודות של שישי ושבת.</div>`);
-  document.getElementById("banners").innerHTML = b.join("");
-  document.getElementById("shabbat-report").classList.toggle("hidden", !s.can_report_shabbat);
+  document.getElementById("banners").innerHTML = s.is_rest_day
+    ? `<div class="banner rest"><b>🌿 יום מנוחה</b>במסלול של חמישה ימים בשבוע אין מכסה
+       בשישי ובשבת. הרצף נשמר גם בלי ללמוד.</div>`
+    : "";
 
-  const left = s.required_units - s.completed_units;
-  const done = s.required_units > 0 && left <= 0;
+  // A rest day asks for nothing, but reading it is optional rather than
+  // forbidden - so the goal to show is the plan's daily goal, and finishing it
+  // credits the day like any other.
+  const goal = s.optional_goal;
+  const left = goal - s.completed_units;
+  const done = left <= 0;
   const hint = document.getElementById("today-hint");
-  if (s.required_units === 0){
-    hint.innerHTML = `<b>אין מכסה היום</b><span class="step">המנה של היום כבר נלמדה ביום שישי.</span>`;
-  } else if (done){
+  if (done){
     hint.innerHTML = `<b>✓ סיימת את המכסה של היום</b><span class="step">הרצף שלך: ${s.current_streak} ימים. נתראה מחר.</span>`;
+  } else if (s.is_rest_day){
+    hint.innerHTML = `<b>אין מכסה היום</b><span class="step">אפשר ללמוד בכל זאת — ` +
+      `${goal} המשניות שלמטה ייספרו לרצף ולנקודות בדיוק כמו ביום רגיל.</span>`;
   } else {
-    hint.innerHTML = `<b>קרא את ${left} המשניות שלמטה</b>` +
+    hint.innerHTML = `<b>למד את ${left} המשניות שלמטה</b>` +
       `<span class="step">כל משנה מופיעה עם הפירושים — לחץ על שם פירוש כדי לפתוח אותו. ` +
       `בסיום לחץ על הכפתור בתחתית המסך.</span>`;
   }
 
   const btn = document.getElementById("btn-done");
-  btn.disabled = done || s.required_units === 0;
+  btn.disabled = done;
   btn.textContent = done ? "✓ סיימת להיום"
-    : s.required_units === 0 ? "אין מה ללמוד היום"
-    : `סיימתי לקרוא ${left} משניות · +${s.points_if_completed} נק׳`;
+    : s.is_rest_day ? `למדתי בכל זאת · +${s.points_if_completed} נק׳`
+    : `סיימתי ללמוד ${left} משניות · +${s.points_if_completed} נק׳`;
 
   document.getElementById("p-streak").textContent = s.current_streak;
   document.getElementById("p-longest").textContent = s.longest_streak;
@@ -547,15 +609,10 @@ function renderStrip(){
 }
 
 async function markDone(){
-  const left = state.required_units - state.completed_units;
+  const left = state.optional_goal - state.completed_units;
   if (left <= 0) return;
   const r = await api("/study/log", {method:"POST", body:{units:left}});
   toast(r.day_completed ? `יישר כוח! +${r.points_awarded} נק׳ · רצף ${r.streak}` : "נרשם");
-  await boot();
-}
-async function reportShabbat(){
-  const r = await api("/study/shabbat-report", {method:"POST", body:{completed:true}});
-  toast(`+${r.friday_points + r.shabbat_points + r.motash_bonus} נק׳`);
   await boot();
 }
 
@@ -648,7 +705,16 @@ async function loadShas(){
 
 // ---------- settings ----------
 const GOALS = [1,2,3,4,5,6,8,10,15,20];
+const SIGN_IN_LABEL = {google: "Google", password: "אימייל וסיסמה"};
+async function loadAccount(){
+  try {
+    const me = await api("/me");
+    document.getElementById("set-account").textContent =
+      `${me.email} · התחברות עם ${SIGN_IN_LABEL[me.sign_in] || me.sign_in}`;
+  } catch { document.getElementById("set-account").textContent = "—"; }
+}
 function loadSettings(){
+  loadAccount();
   document.getElementById("set-current").textContent =
     `${plan.tractate} — ${plan.completed} מתוך ${plan.total} משניות נלמדו`;
   document.getElementById("set-eta").textContent = plan.estimated_end_date || "—";
@@ -657,6 +723,8 @@ function loadSettings(){
   g.innerHTML = GOALS.map(n => `<option value="${n}">${n} ביום</option>`).join("");
   g.value = plan.daily_goal;
   setPreview();
+
+  document.getElementById("set-week").value = state.study_week;
 
   fillChapters(document.getElementById("set-chapter"), plan.chapters);
   document.getElementById("set-chapter").value = plan.next_chapter || 1;
@@ -681,6 +749,12 @@ async function saveGoal(){
   const r = await api("/plans/current", {method:"PUT",
     body:{daily_goal: Number(document.getElementById("set-goal").value)}});
   toast(`היעד עודכן · סיום משוער ${r.estimated_end_date}`);
+  await boot(); loadSettings();
+}
+async function saveWeek(){
+  const week = document.getElementById("set-week").value;
+  const r = await api("/me/preferences", {method:"PUT", body:{study_week: week}});
+  toast(`${week === "five_days" ? "5 ימים" : "7 ימים"} בשבוע · סיום משוער ${r.estimated_end_date || "—"}`);
   await boot(); loadSettings();
 }
 async function savePosition(){
@@ -748,12 +822,20 @@ function obPreview(){
                           document.getElementById("ob-mishnah").value);
   const goal = Number(document.getElementById("ob-goal").value);
   const left = total - start + 1;
+  const perWeek = document.getElementById("ob-week").value === "five_days" ? 5 : 7;
+  const days = Math.ceil(left / goal);
   document.getElementById("ob-preview").innerHTML =
-    `<b>${left} משניות ללמוד</b><span class="step">בקצב ${goal} ביום — כ־${Math.ceil(left/goal)} ימי לימוד.</span>`;
+    `<b>${left} משניות ללמוד</b><span class="step">בקצב ${goal} ביום — כ־${days} ימי לימוד, ` +
+    `כ־${Math.ceil(days / perWeek)} שבועות.</span>`;
 }
 async function createPlan(){
   const slug = document.getElementById("ob-tractate").value;
   const goal = Number(document.getElementById("ob-goal").value);
+  // The week mode goes first: the plan's completion estimate is projected
+  // against it, so setting it afterwards would leave the user looking at a
+  // date computed for the wrong number of study days.
+  await api("/me/preferences", {method:"PUT",
+    body:{study_week: document.getElementById("ob-week").value}});
   await api("/plans", {method:"POST", body:{tractate_slug:slug, daily_goal:goal}});
   const ch = Number(document.getElementById("ob-chapter").value);
   const mi = Number(document.getElementById("ob-mishnah").value);
@@ -784,10 +866,54 @@ async function buy(sku){
   const r = await api("/shop/purchase",{method:"POST",body:{sku}});
   toast(`נרכש — נותרו ${r.balance} נק׳`); await boot(); loadShop();
 }
+// ---------- email + password ----------
+let registerMode = false;
+function togglePasswordMode(){ setPasswordMode(!registerMode); }
+function setPasswordMode(register){
+  registerMode = register;
+  document.getElementById("pw-submit").textContent = registerMode ? "הרשמה" : "כניסה";
+  document.getElementById("pw-switch-text").textContent =
+    registerMode ? "כבר יש לך חשבון?" : "אין לך חשבון?";
+  document.getElementById("pw-switch").textContent = registerMode ? "כניסה" : "הרשמה";
+  document.getElementById("pw-password").autocomplete =
+    registerMode ? "new-password" : "current-password";
+  pwHint(registerMode ? "לפחות 8 תווים." : "");
+}
+function pwHint(message, bad){
+  const el = document.getElementById("pw-hint");
+  el.textContent = message;
+  el.classList.toggle("bad", !!bad);
+}
+async function submitCredentials(){
+  const email = document.getElementById("pw-email").value.trim();
+  const password = document.getElementById("pw-password").value;
+  if (!email || !password){ pwHint("יש למלא אימייל וסיסמה.", true); return; }
+  if (registerMode && password.length < 8){
+    pwHint("הסיסמה צריכה להיות באורך 8 תווים לפחות.", true); return;
+  }
+
+  const btn = document.getElementById("pw-submit");
+  btn.disabled = true;
+  pwHint("");
+  try {
+    const d = await api(registerMode ? "/auth/register" : "/auth/login", {
+      method: "POST",
+      body: {email, password, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone}
+    });
+    token = d.access_token;
+    localStorage.setItem("token", token);
+    document.getElementById("pw-password").value = "";
+    await boot();
+  } catch (err){
+    pwHint(err.message || "ההתחברות נכשלה.", true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 async function devLogin(){
   const d = await api("/dev/login", {method:"POST", body:{
-    email: document.getElementById("email").value,
-    observes_shabbat: document.getElementById("shabbat-mode").value === "1"}});
+    email: document.getElementById("email").value}});
   token = d.access_token; localStorage.setItem("token", token); await boot();
 }
 async function tick(){
@@ -814,18 +940,23 @@ const AUTH_ERRORS = {
 };
 
 async function showLoginScreen(){
-  let config = {google:false, dev_mode:false};
+  let config = {google:false, password:true, dev_mode:false};
   try { config = await api("/auth/google/configured"); } catch {}
+  // Always land on "sign in". Someone arriving here after a logout, or after
+  // a session expired, is coming back to an account they already have.
+  setPasswordMode(false);
+  document.getElementById("pw-password").value = "";
+  document.getElementById("password-login").classList.toggle("hidden", !config.password);
   document.getElementById("google-login").classList.toggle("hidden", !config.google);
   document.getElementById("dev-login").classList.toggle("hidden", !config.dev_mode);
   document.getElementById("no-login").classList.toggle(
-    "hidden", config.google || config.dev_mode);
+    "hidden", config.password || config.google || config.dev_mode);
   document.querySelector(".devbar").classList.toggle("hidden", !config.dev_mode);
 
   const err = new URLSearchParams(location.search).get("auth_error");
   if (err){
     const box = document.getElementById("auth-error");
-    box.className = "banner shabbat";
+    box.className = "banner rest";
     box.textContent = AUTH_ERRORS[err] || ("שגיאת התחברות: " + err);
     history.replaceState({}, "", location.pathname);
   }
@@ -835,6 +966,11 @@ async function showLoginScreen(){
 async function logout(){
   try { await api("/auth/logout", {method:"POST"}); } catch {}
   token = ""; localStorage.removeItem("token");
+  // Drop the previous account's data with the session. Leaving it behind means
+  // the next person to sign in sees someone else's streak until boot() lands.
+  state = portion = plan = null;
+  browseOrdinal = null;
+  tab = "today";
   await showLoginScreen();
 }
 

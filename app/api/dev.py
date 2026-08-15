@@ -6,8 +6,8 @@ credential, and `time` moves the clock for the whole process - so the flag is
 checked at mount time in main.py *and* again per request here.
 
 Time travel exists because the features worth demonstrating (a 4-day
-multiplier, a Shabbat freeze, a missed-day penalty) are otherwise only
-observable by waiting a week.
+multiplier, a rest day, a missed-day penalty) are otherwise only observable by
+waiting a week.
 """
 
 from __future__ import annotations
@@ -26,7 +26,6 @@ from app.core.security import GoogleIdentity, issue_tokens, upsert_user
 from app.models import (
     FreezeUsage,
     PointTransaction,
-    ShabbatReport,
     StudyDay,
     StudyEvent,
     StudyPlan,
@@ -34,7 +33,6 @@ from app.models import (
     UserInventory,
     UserStats,
 )
-from app.services.zmanim import CANDLE_OFFSET_BY_CITY
 
 router = APIRouter(prefix="/dev", tags=["dev"])
 
@@ -48,8 +46,6 @@ class DevLoginIn(BaseModel):
     email: str = "demo@example.com"
     display_name: str = "לומד/ת הדגמה"
     timezone: str = "Asia/Jerusalem"
-    city: str = "jerusalem"
-    observes_shabbat: bool = True
 
 
 @router.post("/login")
@@ -68,12 +64,10 @@ def dev_login(payload: DevLoginIn, session: DbSession, response: Response) -> di
         select(User.id).where(User.google_sub == identity.sub)
     ).scalar_one_or_none()
 
+    # Deliberately does not touch `study_week`: it is chosen once at onboarding
+    # and changed from settings, so writing it on every login would silently
+    # reset a returning learner's track.
     user = upsert_user(session, identity, payload.timezone)
-    user.observes_shabbat = payload.observes_shabbat
-    # Real coordinates so the demo shows real candle-lighting times.
-    user.latitude, user.longitude = 31.7683, 35.2137
-    user.in_israel = True
-    user.candle_lighting_offset = CANDLE_OFFSET_BY_CITY.get(payload.city, 18)
 
     if existed is None:
         session.add(UserStats(user_id=user.id))
@@ -128,7 +122,6 @@ def dev_reset(user: CurrentUser, session: DbSession) -> dict:
         StudyEvent,
         StudyDay,
         PointTransaction,
-        ShabbatReport,
         FreezeUsage,
         UserInventory,
         StudyPlan,

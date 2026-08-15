@@ -1,14 +1,20 @@
 # Mishnah Tracker
 
 **Open the app, read today's mishnah with its commentaries, mark it learned.**
-That is the whole product. Everything below — streaks, points, penalties,
-Shabbat handling — exists to get someone to open it, and is deliberately
-confined to one thin strip at the top of the screen.
+That is the whole product. Everything below — streaks, points, penalties —
+exists to get someone to open it, and is deliberately confined to one thin
+strip at the top of the screen.
 
 Each day shows the actual text of your mishnayot: vocalised Hebrew, with
-Bartenura, the Rambam, Tosafot Yom Tov, Ikar Tosafot Yom Tov, Tiferet Yisrael
-(Yachin and Boaz), and an English explanation. Bartenura opens by default; the
-rest are one tap away. Nikud toggles off for anyone who reads without it.
+Bartenura, the Rambam, Tosafot Yom Tov, Ikar Tosafot Yom Tov and Tiferet
+Yisrael (Yachin and Boaz). Bartenura opens by default; the rest are one tap
+away. Nikud toggles off for anyone who reads without it. The whole corpus ships
+with the app — 4,192 mishnayot and their commentaries, read from disk, never
+fetched at request time.
+
+You learn either **seven days a week or five** (Sunday to Thursday). That is
+the only calendar rule in the app: on a five-day week Friday and Shabbat carry
+no quota, no penalty, and hold the streak steady.
 
 FastAPI + SQLAlchemy 2.0. Self-contained project — no relation to anything else
 on the Desktop.
@@ -26,7 +32,7 @@ boot creates `mishnah.db` (SQLite) and seeds 63 tractates / 4,192 mishnayot.
 Nothing else to install.
 
 The dev bar at the bottom of the UI travels through time — a 4-day multiplier
-and a Shabbat freeze are otherwise only observable by waiting a week. It is
+and a missed-day penalty are otherwise only observable by waiting a week. It is
 gated behind `dev_mode` and 404s when that is off.
 
 **SQLite is for development only.** It has no row locks, so the concurrency
@@ -43,20 +49,20 @@ anything real.
 |---|---|
 | A long-lived Python 3.12+ ASGI process | the whole backend; `uvicorn app.main:app` |
 | PostgreSQL with real transactions | `ledger.lock_stats` takes `SELECT … FOR UPDATE`; it is the only thing preventing two concurrent requests from both advancing the same streak |
-| The process to stay alive **after** a response is sent | `routes.study_portion` returns, then a `BackgroundTasks` job warms the next portion's texts |
 | A connection pool held between requests | `db/session.py` — `pool_size=10, max_overflow=20` |
-| Outbound HTTPS | Sefaria for texts, Google for token exchange and JWKS |
+| ~11 MB in the image | `app/data/texts/` — the corpus travels with the code |
+| Outbound HTTPS | Google for token exchange and JWKS. Nothing else. |
 | Server-side secrets | the OAuth client secret and `JWT_SECRET` must never reach the browser |
 | Ability to set cookies on a redirect | the Google callback sets an HttpOnly refresh cookie, then redirects |
 | HTTPS on a stable domain | `Secure` cookies, and Google validates the exact redirect URI |
-| ~512 MB RAM | FastAPI + SQLAlchemy + the zmanim/pyluach libraries |
+| ~512 MB RAM | FastAPI + SQLAlchemy, plus one tractate's text held in an LRU |
 
-No persistent disk is needed — all state is in Postgres, and the text cache is
-a database table.
+No persistent disk is needed — all mutable state is in Postgres, and the texts
+are read-only files baked into the image.
 
 ### Why not Netlify
 
-Netlify runs a static CDN plus short-lived serverless functions. Four things
+Netlify runs a static CDN plus short-lived serverless functions. Three things
 rule it out, the first on its own:
 
 1. **Python is not a Netlify Functions runtime.** The official configuration
@@ -67,19 +73,11 @@ rule it out, the first on its own:
 2. **Netlify has no database.** You would be renting Postgres elsewhere
    anyway, at which point the only thing Netlify contributes is the part this
    app does not need.
-3. **A function is frozen once it responds.** The prefetch that warms
-   tomorrow's texts runs *after* the response is sent, so it would simply
-   never execute. Netlify's background functions are a different invocation
-   type, not "keep working after you answer".
-4. **Pooled connections and row locks assume a process that persists.**
+3. **Pooled connections and row locks assume a process that persists.**
    `pool_size=10` is meaningless when every request is a fresh instance, and
    serverless Postgres access needs an external pooler to avoid exhausting
-   connections.
-
-Measured, for scale: a cold portion request for a 10-mishnayot-per-day plan
-makes 80 Sefaria calls and takes ~26s; warm from the cache it is ~2s and the
-response is 109 KB. That fits inside Netlify's 60-second synchronous limit —
-the blockers above are structural, not about timeouts.
+   connections. The same goes for the text LRU: a learner reads one tractate
+   for weeks, and a fresh instance per request re-parses it every time.
 
 Netlify remains the right host for a static site. It is simply a different
 kind of thing from this.
@@ -89,8 +87,8 @@ kind of thing from this.
 Worth stating up front, because it removes a whole component. `settle_user`
 runs on every read, so a user who disappears for three weeks is settled
 correctly the moment they open the app — verified: 21 days away with no
-scheduler at all, one read, all 22 days resolved (15 missed, 6 Shabbat, streak
-reset).
+scheduler at all, one read, all 22 days resolved (15 missed, 6 rest days,
+streak reset).
 
 A scheduled sweep only earns its place when something must be correct *without*
 the user showing up: a leaderboard showing other people's streaks, or a "your
@@ -123,11 +121,12 @@ backups are your problem. Not worth it here.
 
 ### Steps
 
-1. **Google credentials** — in the [Google Cloud Console](https://console.cloud.google.com/apis/credentials),
+1. **Google credentials** *(optional)* — in the [Google Cloud Console](https://console.cloud.google.com/apis/credentials),
    create an OAuth 2.0 Client ID (*Web application*) and add
    `https://YOUR-DOMAIN/api/v1/auth/google/callback` as an authorised redirect
-   URI. Nobody can sign in without this: `DEV_MODE` is off in production by
-   design, and it is the only other way in.
+   URI. Optional because email + password needs no configuration and is always
+   available; without either, `DEV_MODE` being off in production means nobody
+   can sign in at all.
 2. **Push to GitHub.**
 3. **Deploy** — Railway: New Project → Deploy from GitHub, add a Postgres
    plugin. Render: New → Blueprint (reads `render.yaml`).
@@ -176,8 +175,14 @@ Four tabs, because the app does four distinct things:
 - **הש״ס** — all 63 tractates grouped by seder with a progress bar each.
   Progress is the furthest cursor across *all* plans for that tractate, so a
   tractate abandoned half-way still shows what was learned.
-- **הגדרות** — change the daily goal, jump to any chapter:mishnah, or switch
-  tractate. Each destructive action confirms first and states the consequence.
+- **הגדרות** — change the daily goal or the week mode, jump to any
+  chapter:mishnah, switch tractate, or sign out. Each destructive action
+  confirms first and states the consequence.
+
+Onboarding asks for the week mode alongside the tractate and the daily goal —
+it belongs with the other "what am I signing up for" choices, and it is set
+once. Sign-in never writes it, so coming back to the app cannot quietly move
+someone back to seven days a week.
 
 A goal change applies to today when the day is still open, and never to a day
 already resolved — re-scoring a finished day would hand out or revoke a streak
@@ -187,29 +192,47 @@ someone already earned.
 
 ## 2. The text layer (`services/texts.py`)
 
-The part people come for. Sourced from Sefaria's public API and cached
-permanently in `text_cache`.
+The part people come for. Downloaded from Sefaria **once**, by
+`scripts/fetch_texts.py`, into one gzipped JSON file per tractate under
+`app/data/texts/` — 63 files, ~11 MB, committed. At request time the app opens
+a file and reads a dict. There is no network call, no cache table, and nothing
+to warm.
 
-| Commentary | Ref pattern | Licence |
+| Commentary | Sefaria index | Licence |
 |---|---|---|
-| ברטנורא | `Bartenura on {book} {ch}:{n}` | CC-BY-NC |
+| ברטנורא | `Bartenura on {book}` | CC-BY-NC |
 | פירוש הרמב״ם | `Rambam on …` | Public Domain |
 | עיקר תוספות יום טוב | `Ikar Tosafot Yom Tov on …` | CC-BY-NC |
 | תוספות יום טוב | `Tosafot Yom Tov on …` | Public Domain |
 | תפארת ישראל – יכין / בועז | `Yachin on …` / `Boaz on …` | Public Domain |
-| English explanation | `English Explanation of …` | CC-BY (Dr. Joshua Kulp) |
 
-Three decisions worth naming:
+**Shipping the corpus beats caching it.** The texts are centuries old and never
+change, so the only thing a live API gives you is a dependency that fails on a
+train, during a rate-limit, or on the morning Sefaria is down — precisely when
+someone is trying to keep a streak. Forty megabytes of Hebrew gzips to eleven,
+which is smaller than most of what a web app ships without thinking about it.
+A tractate is parsed once per process and held in an 8-slot LRU, because a
+learner reads the same one for weeks.
 
-**Caching is correctness, not speed.** The texts are centuries old and never
-change, so there is no invalidation problem — `fetched_at` is for debugging,
-not expiry. The cache exists so the study screen still renders when Sefaria is
-slow, rate-limiting, or unreachable, and so yesterday's mishnah opens on a
-train. A cached read returns all seven commentaries in ~6ms. After each
-session the next portion is prefetched in a background task.
+**Commentary is anchored through Sefaria's link graph, not by position.** This
+is the subtle one. A commentary numbers its own segments, and that numbering is
+not the mishnah's: `Yachin on Mishnah Berakhot 1:13` is the *thirteenth comment
+in chapter 1*, which lands on mishnah 2. Reading `Yachin … 1:3` as "the comment
+on mishnah 3" returns real, well-formed, **wrong** text — no error, nothing to
+notice. The fetch script asks `/api/links` for each chapter and uses the
+`anchorRef → ref` mapping instead, then joins every segment anchored to a given
+mishnah in ref order.
+
+**No single edition is complete**, so editions are layered. Mishnah Bikkurim's
+primary version is the one printed with the Gemara and holds only chapter 4;
+Torat Emet holds chapters 1–3 and stops. Taking the primary alone leaves 34 of
+39 mishnayot blank. The script fills gaps from further Hebrew editions and
+records every version it used in the file's `sources`. The largest books
+(Tosafot Yom Tov on Chullin) make Sefaria's gateway time out, so a book that
+fails whole is re-fetched a chapter at a time.
 
 **A missing commentary is normal.** Not every mishnah has an Ikar Tosafot Yom
-Tov; Berakhot 1:1 has seven commentaries and 1:2 has six. Misses are skipped
+Tov; Berakhot 1:1 has six commentaries and 1:2 has five. Misses are skipped
 silently rather than surfaced as errors.
 
 **Refs are built from Sefaria's spelling, not ours.** `tractates.sefaria_title`
@@ -217,10 +240,19 @@ stores the title that actually resolved during seeding, because Sefaria files
 Uktzin as *Oktzin* — deriving refs from our own `name_en` would 404 every text
 in that tractate.
 
-Markup is sanitised server-side to an inline allow-list, and the client builds
-the node tree from that allow-list rather than assigning `innerHTML`. The bold
-lemma is kept deliberately: the dibur hamatchil a commentary opens with tells
-you which words it is on, so stripping all tags would lose meaning.
+Markup is sanitised **at download time** to an inline allow-list, so nothing
+unsanitised is ever stored; the client then builds the node tree from the same
+allow-list rather than assigning `innerHTML`. The bold lemma is kept
+deliberately and then *highlighted*: the dibur hamatchil a commentary opens
+with tells you which words of the mishnah it is on, and tinting it is what
+turns a wall of justified Hebrew into something you can navigate.
+
+To re-download (a Sefaria correction, or a new commentary in the list):
+
+```bash
+.venv/Scripts/python.exe scripts/fetch_texts.py            # all 63, ~30 min
+.venv/Scripts/python.exe scripts/fetch_texts.py berakhot   # just one
+```
 
 Hebrew numerals are computed client-side for references — פרק א׳, משנה ב׳, and
 ט״ו / ט״ז rather than יה / יו.
@@ -233,10 +265,9 @@ Most of this app is CRUD. Three things are not, and the whole structure follows
 from them.
 
 **A "day" is not a timestamp range.** It is a human unit that depends on the
-user's timezone, on a 03:00 rollover (people learn at 01:00 and expect it to
-count for the day that just ended), and on the Hebrew calendar. Every day
-boundary goes through `UserClock`; no other module calls `.date()` on a
-timestamp.
+user's timezone and on a 03:00 rollover — people learn at 01:00 and expect it
+to count for the day that just ended. Every day boundary goes through
+`UserClock`; no other module calls `.date()` on a timestamp.
 
 **Nobody is online when the penalty should fire.** A streak breaks at midnight
 in a timezone the server isn't in, for a user who isn't connected. So the
@@ -245,10 +276,10 @@ system cannot be event-driven off user actions. Instead there is one
 each exactly once — called on every read *and* from an hourly cron. Neither
 needs to know about the other.
 
-**Shabbat inverts the penalty logic.** For 28 hours a week, *not* using the app
-is the expected behaviour and must cost nothing. That means the freeze is not a
-UI state — it has to be a rule inside the settlement engine, or the cron will
-happily punish observant users at 03:00 Saturday.
+**A rest day inverts the penalty logic.** On a five-day week, *not* using the
+app on Friday and Shabbat is the expected behaviour and must cost nothing. That
+cannot be a UI state — it has to be a rule inside the settlement engine, or the
+cron will happily punish those users at 03:00 Saturday.
 
 ---
 
@@ -261,7 +292,6 @@ erDiagram
     users ||--o{ study_days : "one row per local date"
     users ||--o{ study_events : "append-only actions"
     users ||--o{ point_transactions : "append-only ledger"
-    users ||--o{ shabbat_reports : "Motzash checkbox"
     users ||--o{ user_inventory : "owned items"
     users ||--o{ freeze_usages : "which freeze saved which day"
     users ||--o{ refresh_tokens : "rotating sessions"
@@ -279,7 +309,8 @@ erDiagram
 | `study_events` | Append-only log of the user actually logging study | A day is a *judgement*; an event is an *action*. Two logs of 1 mishnah = two events, one day row. Carries the client `Idempotency-Key`. |
 | `point_transactions` | Append-only, signed, with a unique `idempotency_key` | The truth about points. `user_stats.total_points` is a materialised balance you can always rebuild with `SUM(amount)`. |
 | `user_stats` | Balance, streak, `last_settled_date` | Also the **lock row**: every mutating path takes `SELECT … FOR UPDATE` on it first, which serialises all scoring for that user without a distributed lock. |
-| `shabbat_reports` | The Motzash declaration | Hands out points for days with no in-app activity, so it needs its own audit trail and its own timestamp (the Motash bonus depends on when it arrived). |
+
+The texts are not a table. They are files under `app/data/texts/`.
 
 ### Day statuses
 
@@ -289,13 +320,12 @@ erDiagram
 | `COMPLETED` | +1 | award | Goal met |
 | `MISSED` | → 0 | penalty | Goal not met, no protection |
 | `FROZEN_ITEM` | unchanged | 0 | A Streak Freeze absorbed it |
-| `SHABBAT_PENDING` | — | — | Fri/Sat awaiting the Motzash report |
-| `SHABBAT_UNREPORTED` | unchanged | 0 | Grace expired — neutral, **not** punished |
+| `REST_DAY` | unchanged | 0 | Off by the week mode — neutral, **not** punished |
 | `EXEMPT` | unchanged | 0 | Before signup / paused plan |
 
-The distinction between "unchanged" and "→ 0" is the entire Shabbat feature.
-A freeze and an unreported Shabbat both *hold* the streak; neither *advances*
-it. A freeze protects, it does not substitute for study.
+The distinction between "unchanged" and "→ 0" is the whole of the week-mode
+feature. A freeze and a rest day both *hold* the streak; neither *advances* it.
+A freeze protects, it does not substitute for study.
 
 ### Progress as a single integer
 
@@ -334,57 +364,52 @@ settlement engine when a day would otherwise be `MISSED` — no pre-arming, no
 
 ---
 
-## 6. Sabbath Mode
+## 6. The study week
 
-### The week
+One setting, two values, and it is the only calendar rule in the app:
 
-```
-Fri 00:00 ─ Double Portion unlocks. Friday's row requires 2 × daily_goal.
-Fri 17:00 ─ freeze_start = candle lighting − 60 min.
-            Penalties stop accruing. An unfinished Thursday is NOT judged;
-            settlement defers rather than punishing.
-Fri 18:00 ─ candle lighting.
-Sat 20:00 ─ havdalah (tzeis). Report window opens.
-Sat 23:59 ─ Motash bonus deadline (real local midnight, not the 03:00 rollover).
-Mon 03:00 ─ report window closes. Unreported Fri/Sat lock as neutral.
-```
+| Mode | Study days | Friday & Shabbat |
+|---|---|---|
+| `seven_days` *(default)* | every day | ordinary days: full quota, ordinary penalty |
+| `five_days` | Sunday–Thursday | `required_units = 0`, never punished, streak held |
 
-### The quota is moved, not duplicated
+`User.study_week` lives on the user rather than the plan, because it describes
+a person's rhythm — switching tractate should not quietly put someone back to
+seven days a week.
 
-Friday requires `2 × daily_goal`; Shabbat requires `0`. Over a week the user
-still learns `daily_goal × 7` — asserted in
-`test_the_weekly_quota_is_unchanged_by_shabbat_mode`.
+### Nothing is carried over
 
-### Four paths through a Shabbat
+A rest day's quota is not moved to a neighbouring day. Five days a week means
+five days' worth of mishnayot, which is the entire reason someone picks it; a
+"catch-up" Thursday of double length would hand them back the burden they just
+opted out of. The completion estimate absorbs the difference instead, which is
+why it is a calendar walk (§10).
 
-| What the user does | Friday | Shabbat | Streak | Points |
-|---|---|---|---|---|
-| Logs the double portion Friday morning | `COMPLETED` | `COMPLETED` | **+2** | 2 days' worth |
-| Never opens the app, checks the box Motzash | `COMPLETED` | `COMPLETED` | **+2** | 2 days + Motash bonus |
-| Checks the box Sunday | `COMPLETED` | `COMPLETED` | **+2** | 2 days, no bonus |
-| Never reports | `SHABBAT_UNREPORTED` | `SHABBAT_UNREPORTED` | **held** | 0, no penalty |
+### Three ways through a weekend on a five-day week
 
-Row 1 is a deliberate product decision: logging Friday's double portion *is*
-doing Shabbat's quota, so Shabbat credits without the checkbox. The checkbox
-remains the only route to the Motash bonus. Flip it in `_decide_shabbat` if you
-want the declaration to be mandatory.
+| What the user does | Friday | Shabbat | Streak |
+|---|---|---|---|
+| Does not open the app | `REST_DAY` | `REST_DAY` | **held** |
+| Reads Friday's portion anyway | `COMPLETED` | `REST_DAY` | **+1** |
+| Reads both | `COMPLETED` | `COMPLETED` | **+2** |
 
-Friday is always credited **before** Shabbat, because the second day scores at
-whatever tier the first one just unlocked. Getting that order wrong silently
-underpays users at every tier boundary.
+A rest day requires nothing, but it is not *closed*: the portion still renders,
+the button still works, and finishing the daily goal credits the day like any
+other. Being told "today does not count" is a worse experience than being given
+the day off, and it is one branch in `_decide` either way.
 
-### Zmanim
+### Setting and changing the mode
 
-`services/zmanim.py` is an interface with two implementations: real
-sunset-based times via the `zmanim` package (KosherJava port), and a fixed
-local-clock fallback (Fri 18:00 → Sat 20:00) for when the library is missing or
-the user never shared a location. Yom Tov comes from `pyluach`, excluding Chol
-HaMoed — verified against Rosh Hashana 5787 and Pesach 5786.
+Chosen at onboarding, changed in הגדרות; both go through `PUT
+/me/preferences`, which re-classifies **today's open row** and re-projects the
+completion estimate immediately rather than waiting for the next settlement.
+Days already resolved keep the judgement they were given — re-scoring a
+finished day is how you accidentally revoke a streak someone earned.
 
-> **Verify before launch.** Check the library provider against a published luach
-> for your target cities. Being 20 minutes late with a freeze is a support
-> ticket; being 20 minutes early is a halachic complaint. The fallback provider
-> is a stopgap, not a default for observant users.
+Nothing on the sign-in path writes `study_week`. It is the kind of field a
+login handler acquires a default for by accident, and the symptom — a learner's
+track silently reverting on their next visit — looks like a data-loss bug
+rather than a login bug.
 
 ---
 
@@ -397,13 +422,12 @@ lock user_stats FOR UPDATE
 cursor = last_settled_date + 1
 while cursor < today:                 # today is never finalised — it is still winnable
     day = get_or_create(cursor)
-    decide → CREDIT | MISS | FREEZE | NEUTRAL | EXEMPT | CARRY | DEFER
-    DEFER  → stop; leave the watermark behind this day
-    else   → apply, advance last_settled_date
+    decide → CREDIT | MISS | FREEZE | REST | EXEMPT | CARRY
+    apply, advance last_settled_date
 ensure today's row exists
 ```
 
-Three properties make this safe to call from anywhere:
+Two properties make this safe to call from anywhere:
 
 1. **Idempotent.** Terminal statuses are never recomputed, and every award
    carries a deterministic `idempotency_key` (`daily:<user>:<date>`). Re-running
@@ -411,11 +435,12 @@ Three properties make this safe to call from anywhere:
    applied" — the balance must not move, and the streak must not advance.
 2. **Ordered.** Days resolve chronologically because the multiplier depends on
    the streak, which depends on yesterday.
-3. **Deferring, not guessing.** `DEFER` is returned when a day is not yet
-   judgeable — inside the Shabbat window, or before the report deadline. The
-   watermark stays behind it, so the day is revisited later. This is what makes
-   "penalties pause on Friday afternoon" a data-integrity property rather than a
-   UI trick.
+
+Every closed day is now decidable the moment it closes, which is what removed
+the old `DEFER` state: when rest days were defined by sunset and a retroactive
+report, a Friday could not be judged until the following Monday, and the
+settlement watermark had to be able to stay behind an unresolved day. A rest
+day is a property of the date itself, so that machinery is gone.
 
 **Called on every read**, so a user opening the app after two weeks sees correct
 state immediately. The **hourly** cron (`workers/nightly.py` — hourly despite
@@ -434,18 +459,45 @@ ledger and `study_events`.
 
 ## 8. Auth
 
-Google **Authorization Code + PKCE**. The code is exchanged server-side so the
-client secret never reaches the browser, and the returned `id_token` is
-*verified* against Google's JWKS (`aud`, `iss`, `exp`) rather than trusted — an
-attacker can POST any JWT they like at our endpoint.
+Two ways in. Both end at the same place: a short-lived access JWT (15 min) held
+in memory, plus a rotating refresh token stored **hashed** — a database leak
+must not hand out live sessions. Reusing a consumed refresh token is the
+classic stolen-token signal, so it revokes the whole chain for that user.
 
-Users are keyed on Google's `sub`, **never on email**. Workspace emails get
+### Email + password
+
+`POST /auth/register` and `POST /auth/login`. Passwords are hashed with
+**scrypt from the standard library** rather than bcrypt or argon2 from a
+compiled wheel: it is memory-hard, it needs no build toolchain, and the cost
+parameters travel inside the digest (`scrypt$n$r$p$salt$hash`) so they can be
+raised later without invalidating anyone's password.
+
+Two details that are easy to get wrong and are pinned by tests:
+
+- **A wrong password and an unknown address return the identical response.**
+  Distinguishing them turns the login form into a directory of who has an
+  account here. `verify_password` also hashes against a dummy digest when
+  there is no account, so the two paths take the same time — returning early
+  would leak through the clock what the response body does not say.
+- **Email is unique among password accounts only**, via a partial index. There
+  the address *is* the identity. Constraining it globally would import the
+  Workspace email-reuse problem into the Google path, which is the whole reason
+  `google_sub` is the join key there. Registration additionally refuses an
+  address any account already holds, so signing in with Google and then
+  registering the same address cannot silently fork someone's streak into two.
+
+n=2**14 is deliberate: OpenSSL refuses scrypt over 32 MB by default, so n=2**15
+with r=8 does not run slower, it raises "memory limit exceeded".
+
+### Google
+
+**Authorization Code + PKCE**. The code is exchanged server-side so the client
+secret never reaches the browser, and the returned `id_token` is *verified*
+against Google's JWKS (`aud`, `iss`, `exp`) rather than trusted — an attacker
+can POST any JWT they like at our endpoint.
+
+Google users are keyed on `sub`, **never on email**. Workspace emails get
 reassigned; matching on them is an account-takeover vector.
-
-We then issue our own short-lived access JWT (15 min) plus a rotating refresh
-token stored **hashed** — a database leak must not hand out live sessions.
-Reusing a consumed refresh token is the classic stolen-token signal, so it
-revokes the whole chain for that user.
 
 ---
 
@@ -453,9 +505,13 @@ revokes the whole chain for that user.
 
 | Method | Path | Notes |
 |---|---|---|
+| `POST` | `/auth/register` | email + password → account and token pair |
+| `POST` | `/auth/login` | email + password → token pair |
+| `POST` | `/auth/logout` | revokes the refresh token, clears the cookie |
 | `POST` | `/auth/google` | code + PKCE verifier → token pair |
 | `POST` | `/auth/refresh` | single-use rotation |
-| `PUT` | `/me/preferences` | timezone, location, `observes_shabbat` |
+| `GET` | `/me` | address, display name, and which sign-in they use |
+| `PUT` | `/me/preferences` | timezone and `study_week`; re-projects the estimate |
 | `GET` | `/tractates` | onboarding picker |
 | `POST` | `/plans` | tractate + daily goal → **estimated completion date** |
 | `GET` | `/study/today` | progress + streak state; settles first |
@@ -467,7 +523,6 @@ revokes the whole chain for that user.
 | `GET` | `/study/portion` | **today's mishnayot with text and commentaries** |
 | `GET` | `/study/mishnah/{ordinal}` | any mishnah in the tractate, for review |
 | `POST` | `/study/log` | `Idempotency-Key` header |
-| `POST` | `/study/shabbat-report` | the Motzash checkbox |
 | `GET` | `/study/history` | streak heatmap |
 | `GET`/`POST` | `/shop/items`, `/shop/purchase` | Streak Freeze |
 | `GET` | `/me/transactions` | points audit trail for the user |
@@ -479,13 +534,14 @@ in the HTTP layer, which is why the rules are testable without an app.
 
 ## 10. Completion estimate
 
-A calendar **walk**, not `ceil(remaining / goal)` — division gets Shabbat wrong,
-since Friday carries double and Shabbat carries none. Walking also makes
-per-user rest days a one-line change later.
+A calendar **walk**, not `ceil(remaining / goal)`. Division is right only for a
+seven-day week; on a five-day week it counts Fridays and Shabbatot that carry
+no quota, and promises a siyum weeks early. Kelim at 2 a day is 127 study days
+either way — but 127 calendar days on a seven-day week and 177 on a five-day
+one, a difference of seven weeks.
 
-One subtlety the tests pinned down: if the final units come out of Friday's
-*Shabbat* half, the siyum belongs on Shabbat, not Friday. If they come out of
-Friday's own half, it stays Friday.
+The walk also means the estimate updates correctly the moment someone switches
+week mode, with no separate arithmetic to keep in step.
 
 ---
 
@@ -495,18 +551,23 @@ Friday's own half, it stays Friday.
 .venv/Scripts/python.exe -m pytest tests/ -q
 ```
 
-**62 passing.** `tests/test_rules.py` covers the pure rules with no database
-(multiplier curve, penalty clamping, day boundaries across timezones,
-double-portion quota, freeze-window containment, report deadlines, completion
-estimates, candle-lighting custom). `tests/test_settlement.py` drives the
-engine against a real database — SQLite by default, PostgreSQL via
-`TEST_DATABASE_URL`. `tests/test_texts.py` covers sanitisation and ref
-construction without touching the network, and `tests/test_portion.py` pins
-down which mishnayot make up a day — every case in it is a bug that reached
-the running app first.
+**136 passing.** `tests/test_auth.py` covers password hashing and the sign-in
+endpoints against a real app and database. `tests/test_rules.py` covers the pure rules with no database (multiplier curve,
+penalty clamping, day boundaries across timezones, the two week modes,
+completion estimates). `tests/test_settlement.py` drives the engine against a
+real database — SQLite by default, PostgreSQL via `TEST_DATABASE_URL`.
+`tests/test_portion.py` pins down which mishnayot make up a day; every case in
+it is a bug that reached the running app first.
+
+`tests/test_texts.py` covers sanitisation and then reads **the committed corpus
+itself**: every tractate has a file, every file's ordinals line up with the seed
+data, and the commentaries are anchored to the right mishnah. Those are the
+failures with no other symptom — a text file that failed to download shows up
+as a blank study screen, and an ordinal that drifted shows the learner a
+different mishnah from the one their progress says they are on.
 
 The models emit correct DDL on both dialects, including partial indexes
-(`WHERE status = 'active'`, `WHERE status IN ('pending','shabbat_pending')`).
+(`WHERE status = 'active'`, `WHERE status = 'pending'`).
 
 ### Verified end-to-end through the running app
 
@@ -515,24 +576,24 @@ Driven through the HTTP API and the browser UI against a real database:
 | Scenario | Result |
 |---|---|
 | Four consecutive days | 10, 10, 10, **15** — multiplier fires on day 4 |
-| Friday | requires 4 (double portion), freeze banner shown, penalties paused |
-| Shabbat | requires 0, streak held at 5 with no login and no penalty |
-| Motzash report at 21:06 | Friday +10, Shabbat +10, **bonus +5**, streak +2 |
-| Motzash report at 00:05 | Friday +15, Shabbat +15, **bonus 0** — past midnight |
+| Friday, seven-day week | requires the plain daily goal; no banner, no exemption |
+| Friday, five-day week | requires 0, rest banner shown, streak held with no login |
+| Reading anyway on a rest day | credited like any other day, streak +1 |
+| Switching week mode mid-day | today re-classified, estimate re-projected in the response |
 | Missed weekday | −15, streak → 0 |
 | Streak Freeze | −120, day marked `frozen_item`, streak held, inventory consumed |
-
-The two Motzash rows are the same code path five minutes apart, and are the
-clearest demonstration that the 03:00 study-day rollover and real civil
-midnight are deliberately different clocks.
 
 ### Bugs this shook out
 
 Worth recording, because each one was invisible until something actually ran:
 
-1. **Candle lighting was hard-coded to 18 minutes.** Jerusalem's custom is 40,
-   so the freeze window opened 22 minutes late — in winter, after users had
-   already put the phone down. Now per-user (`candle_lighting_offset`).
+1. **Commentary was read by position, not by anchor.** `Yachin on Mishnah
+   Berakhot 1:3` is the third *comment of chapter 1*, not the comment on
+   mishnah 3 — so Tiferet Yisrael and Boaz showed confident, well-formed,
+   entirely wrong text on most mishnayot. Found while moving the corpus
+   offline, because that is when the two numbering systems had to be
+   reconciled explicitly instead of assumed equal. Now resolved through
+   Sefaria's link graph.
 2. **`asdict()` vs `__dict__`.** Three handlers serialised `slots=True`
    dataclasses via `__dict__`, which those do not have. Every write endpoint
    returned a 500.
@@ -548,8 +609,8 @@ Worth recording, because each one was invisible until something actually ran:
    (a write) and then made up to sixteen Sefaria round trips with that
    transaction still open. On SQLite that holds a write lock for seconds, and
    every concurrent write in the process failed with "database is locked".
-   Fixed by committing the business work first and giving the text cache its
-   own short transactions.
+   Fixed at the time by committing first; moot now that the texts are local,
+   which is the better answer to the same problem.
 7. **SQLite's defaults are wrong for a web app** in three separate ways:
    `busy_timeout=0` fails instantly instead of waiting, `journal_mode=DELETE`
    makes readers block writers, and foreign keys are *not enforced* unless you
@@ -558,6 +619,18 @@ Worth recording, because each one was invisible until something actually ran:
 8. **The portion anchor counted the wrong plan's units.** Switching tractate
    mid-day rewound the new tractate by however many mishnayot had been learned
    in the old one — switching to Megillah 2:1 displayed Megillah 1:10.
+9. **Turning nikud off erased every dibur hamatchil.** Stripping the vowel
+   points reassigned `textContent` on the whole passage, which flattens it to
+   one text node and takes the `<b>` lemmas with it. Now the text nodes are
+   walked individually and the markup survives.
+10. **`/auth/refresh` 500'd on SQLite.** Refresh-token expiry compared a stored
+    timestamp against an aware `now()`, and SQLite has no timezone type, so it
+    hands the value back naive. Only reachable with a valid cookie and no
+    cached access token — which is precisely the reload path a password login
+    depends on. Postgres would never have shown it.
+11. **`/dev/login` wrote `study_week` on every sign-in.** Defaulting a field in
+    a login handler meant a returning learner's five-day track silently
+    reverted to seven. Sign-in no longer touches it.
 
 ### Not built yet
 
@@ -568,18 +641,19 @@ Worth recording, because each one was invisible until something actually ran:
   complete and the PKCE/state/cookie handling is right by inspection, but it
   needs real credentials to exercise, and only you can create those. Expect to
   debug the redirect URI on the first attempt — it is the usual failure.
-- Yom Tov double-portion flow — Yom Tov currently never penalises and never
-  credits without a log, mirroring an unreported Shabbat. The full
-  Erev-Yom-Tov-carries-the-portion treatment reuses `_decide_shabbat`.
-- Push notifications ("your streak ends in 3 hours" — must respect the freeze
-  window, or you will text observant users on Shabbat)
+- Yom Tov. There is no Hebrew-calendar awareness at all any more; a festival is
+  an ordinary day. `classify_day` is the one place that would change.
+- Custom rest days (a learner who rests Monday, or only Shabbat).
+  `REST_WEEKDAYS` is a frozenset for that reason, but nothing surfaces it.
+- Push notifications ("your streak ends in 3 hours" — must skip rest days, or
+  you will text five-day learners on Shabbat)
 
 ### Decisions worth a second opinion
 
-1. **Friday's double portion auto-credits Shabbat** (§4). Alternative: always
-   require the checkbox.
-2. **Report grace of 1 day.** Longer is kinder; too long and the "Motzash"
-   ritual loses meaning.
+1. **A rest day still credits if you learn anyway** (§6). Alternative: make it
+   truly closed, so the week mode is a hard commitment.
+2. **Five days means Sunday–Thursday**, not "any five you like". Right for the
+   Israeli working week, wrong for a learner who rests on Sunday.
 3. **Penalty clamped at zero.** Alternative: allow debt.
 4. **03:00 rollover.** Assumes nobody studies 03:00–06:00 and calls it
    yesterday.

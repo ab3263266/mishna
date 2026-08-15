@@ -59,7 +59,8 @@ def check(settings: Settings) -> list[str]:
 
     if public and not settings.google_client_id:
         warnings.append(
-            "GOOGLE_CLIENT_ID is unset and DEV_MODE is off, so nobody can sign in."
+            "GOOGLE_CLIENT_ID is unset, so email and password is the only way "
+            "in. That works; set it if you also want the Google button."
         )
 
     if settings.google_client_id and not settings.google_redirect_uri.startswith(

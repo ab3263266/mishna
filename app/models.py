@@ -33,7 +33,6 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     DateTime,
-    Float,
     ForeignKey,
     Index,
     Integer,
@@ -70,33 +69,42 @@ def _uuid_pk() -> Mapped[uuid.UUID]:
 # --------------------------------------------------------------------------- #
 
 
+class StudyWeek(enum.StrEnum):
+    """How many days a week the learner signed up for.
+
+    The only calendar rule in the app. A five-day week rests on Friday and
+    Shabbat - the Israeli working week - and those two days are simply not
+    counted: no quota, no penalty, no effect on the streak. A seven-day week
+    treats every day alike, Shabbat included.
+    """
+
+    SEVEN_DAYS = "seven_days"
+    FIVE_DAYS = "five_days"
+
+
 class DayKind(enum.StrEnum):
-    """What kind of calendar day this is *for this user*."""
+    """Whether this date carries a quota for this user."""
 
     WEEKDAY = "weekday"
-    EREV_SHABBAT = "erev_shabbat"  # Friday - carries the double portion
-    SHABBAT = "shabbat"
-    EREV_YOM_TOV = "erev_yom_tov"
-    YOM_TOV = "yom_tov"
+    REST_DAY = "rest_day"  # off by the plan's week mode
 
 
 class DayStatus(enum.StrEnum):
     """Terminal statuses are never recomputed - that is what makes settlement
-    idempotent. Only PENDING and SHABBAT_PENDING are open."""
+    idempotent. Only PENDING is open."""
 
     PENDING = "pending"
     COMPLETED = "completed"  # goal met -> points awarded, streak += 1
     MISSED = "missed"  # goal not met -> penalty, streak -> 0
     FROZEN_ITEM = "frozen_item"  # missed, but a Streak Freeze absorbed it
-    SHABBAT_PENDING = "shabbat_pending"  # Fri/Sat awaiting the Motzash report
-    SHABBAT_UNREPORTED = "shabbat_unreported"  # grace expired -> neutral day
+    REST_DAY = "rest_day"  # a day off the plan asks nothing of
     EXEMPT = "exempt"  # before signup, paused plan, vacation
 
 
 #: Statuses that hold the streak steady without advancing it. A day that is
 #: neither credited nor punished must not silently break the chain.
 NEUTRAL_STATUSES = frozenset(
-    {DayStatus.FROZEN_ITEM, DayStatus.SHABBAT_UNREPORTED, DayStatus.EXEMPT}
+    {DayStatus.FROZEN_ITEM, DayStatus.REST_DAY, DayStatus.EXEMPT}
 )
 TERMINAL_STATUSES = frozenset(
     {DayStatus.COMPLETED, DayStatus.MISSED} | NEUTRAL_STATUSES
@@ -105,14 +113,11 @@ TERMINAL_STATUSES = frozenset(
 
 class CreditSource(enum.StrEnum):
     APP = "app"  # logged in-app that day
-    SHABBAT_REPORT = "shabbat_report"  # retroactive Motzash checkbox
     BACKFILL = "backfill"  # support tooling / imports
 
 
 class TxnType(enum.StrEnum):
     DAILY_STUDY = "daily_study"
-    SHABBAT_STUDY = "shabbat_study"
-    MOTASH_BONUS = "motash_bonus"
     MISS_PENALTY = "miss_penalty"
     PURCHASE = "purchase"
     MILESTONE = "milestone"
@@ -135,11 +140,19 @@ class User(Base):
 
     id: Mapped[uuid.UUID] = _uuid_pk()
 
-    # Google's `sub` is the stable identifier. Email is mutable and reusable
-    # across Google Workspace accounts, so it must never be the join key.
-    google_sub: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    # Google's `sub` is the stable identifier for Google accounts. Email is
+    # mutable and reusable across Google Workspace accounts, so it must never
+    # be the join key *there*. Null for accounts that sign in with a password.
+    google_sub: Mapped[str | None] = mapped_column(
+        String(255), unique=True, index=True
+    )
     email: Mapped[str] = mapped_column(String(320), index=True)
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    #: scrypt digest, format `scrypt$n$r$p$salt$hash`. Null for Google
+    #: accounts - the two sign-in methods are alternatives, and an account with
+    #: neither cannot be logged into at all.
+    password_hash: Mapped[str | None] = mapped_column(String(255))
     display_name: Mapped[str | None] = mapped_column(String(200))
     avatar_url: Mapped[str | None] = mapped_column(Text)
 
@@ -147,22 +160,12 @@ class User(Base):
     # "a day" ends. IANA name, e.g. "Asia/Jerusalem".
     timezone: Mapped[str] = mapped_column(String(64), default="Asia/Jerusalem")
 
-    # Location drives real zmanim (candle lighting / tzeit). Optional: without
-    # it we fall back to fixed local clock times.
-    latitude: Mapped[float | None] = mapped_column(Float)
-    longitude: Mapped[float | None] = mapped_column(Float)
-    elevation_m: Mapped[float] = mapped_column(Float, default=0.0)
-    in_israel: Mapped[bool] = mapped_column(Boolean, default=True)
-
-    #: Minutes before sunset for candle lighting - a local custom, not a
-    #: constant. Jerusalem is 40, Haifa 30, most of the world 18. Seed from
-    #: CANDLE_OFFSET_BY_CITY at onboarding; let the user override it.
-    candle_lighting_offset: Mapped[int] = mapped_column(SmallInteger, default=18)
-
-    # The master switch for everything in section 3 of the spec. A user who
-    # does not keep Shabbat gets plain weekday logic all week.
-    observes_shabbat: Mapped[bool] = mapped_column(Boolean, default=True)
-    observes_yom_tov: Mapped[bool] = mapped_column(Boolean, default=True)
+    #: Five days a week (Sunday-Thursday) or all seven. Lives on the user and
+    #: not the plan: it describes the person's rhythm, and switching tractate
+    #: should not quietly put them back to seven days a week.
+    study_week: Mapped[StudyWeek] = mapped_column(
+        String(16), default=StudyWeek.SEVEN_DAYS
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -172,6 +175,20 @@ class User(Base):
 
     stats: Mapped[UserStats] = relationship(back_populates="user", uselist=False)
     plans: Mapped[list[StudyPlan]] = relationship(back_populates="user")
+
+    __table_args__ = (
+        # For a password account the email *is* the identity, so it has to be
+        # unique - but only among password accounts. Constraining it globally
+        # would import the Workspace email-reuse problem into the Google path,
+        # which is exactly what `google_sub` exists to avoid.
+        Index(
+            "uq_local_email",
+            "email",
+            unique=True,
+            postgresql_where=password_hash.is_not(None),
+            sqlite_where=password_hash.is_not(None),
+        ),
+    )
 
 
 class UserStats(Base):
@@ -258,32 +275,9 @@ class Tractate(Base):
     mishnayot_count: Mapped[int] = mapped_column(Integer)
 
 
-class TextCache(Base):
-    """Sefaria passages, fetched once and kept.
-
-    The texts are fixed and centuries old, so there is no invalidation problem
-    - `fetched_at` exists for debugging, not expiry. Caching is not an
-    optimisation here but a correctness requirement: the study screen must
-    still render when Sefaria is slow, rate-limiting, or unreachable, and a
-    learner opening yesterday's mishnah on a train deserves the same.
-    """
-
-    __tablename__ = "text_cache"
-
-    ref: Mapped[str] = mapped_column(String(160), primary_key=True)
-    #: "mishnah" for the text itself, otherwise the commentator key.
-    kind: Mapped[str] = mapped_column(String(48), primary_key=True)
-
-    he_ref: Mapped[str | None] = mapped_column(String(160))
-    language: Mapped[str] = mapped_column(String(8), default="he")
-    body: Mapped[str] = mapped_column(Text)
-    #: Sefaria returns the licence per version; we surface it in the UI rather
-    #: than quietly reusing someone's work.
-    license: Mapped[str | None] = mapped_column(String(64))
-    version_title: Mapped[str | None] = mapped_column(String(200))
-    fetched_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+#: The text itself is not in the database at all. It ships as gzipped JSON
+#: under `app/data/texts/` and is read straight off disk by
+#: `app/services/texts.py` - see the note there for why.
 
 
 class Mishnah(Base):
@@ -379,8 +373,9 @@ class StudyDay(Base):
     local_date: Mapped[date] = mapped_column(Date)
     day_kind: Mapped[DayKind] = mapped_column(String(16), default=DayKind.WEEKDAY)
 
-    #: On Erev Shabbat this is 2 x daily_goal (the Double Portion); on Shabbat
-    #: itself it is 0, because the quota was moved forward to Friday.
+    #: The plan's daily goal, or 0 on a rest day. Stored per day rather than
+    #: read from the plan so that changing the goal cannot re-score a day that
+    #: was already judged against the old one.
     required_units: Mapped[int] = mapped_column(SmallInteger, default=0)
     completed_units: Mapped[int] = mapped_column(SmallInteger, default=0)
 
@@ -405,8 +400,8 @@ class StudyDay(Base):
             "ix_days_open",
             "user_id",
             "local_date",
-            postgresql_where=status.in_([DayStatus.PENDING, DayStatus.SHABBAT_PENDING]),
-            sqlite_where=status.in_([DayStatus.PENDING, DayStatus.SHABBAT_PENDING]),
+            postgresql_where=status == DayStatus.PENDING,
+            sqlite_where=status == DayStatus.PENDING,
         ),
         CheckConstraint("completed_units >= 0", name="ck_units_non_negative"),
     )
@@ -519,34 +514,6 @@ class FreezeUsage(Base):
 
     __table_args__ = (
         UniqueConstraint("user_id", "covered_date", name="uq_freeze_per_day"),
-    )
-
-
-class ShabbatReport(Base):
-    """The Motzash checkbox. Its own table because it is a user *declaration*
-    with legal-ish weight in the game economy (it hands out points for days
-    with no in-app activity), and because the Motash bonus depends on exactly
-    when it arrived."""
-
-    __tablename__ = "shabbat_reports"
-
-    id: Mapped[uuid.UUID] = _uuid_pk()
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE")
-    )
-    #: The Saturday this report covers.
-    shabbat_date: Mapped[date] = mapped_column(Date)
-    friday_date: Mapped[date] = mapped_column(Date)
-
-    completed: Mapped[bool] = mapped_column(Boolean, default=True)
-    reported_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    #: True when it landed before local civil midnight on Motzash.
-    earned_motash_bonus: Mapped[bool] = mapped_column(Boolean, default=False)
-
-    __table_args__ = (
-        UniqueConstraint("user_id", "shabbat_date", name="uq_shabbat_report"),
     )
 
 

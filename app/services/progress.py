@@ -1,39 +1,37 @@
 """Onboarding and the completion estimate.
 
 The estimate is deliberately a calendar *walk* rather than
-`ceil(remaining / goal)`. Division gets Shabbat wrong: Friday carries a double
-portion, Saturday carries none, so a naive 7-day rate is right only if the user
-reports every Shabbat. Walking the calendar also makes it trivial to honour
-per-user rest days later without rewriting the maths.
-
-Cost is a few hundred iterations for a long tractate - cheaper than the round
-trip that delivers it.
+`ceil(remaining / goal)`. Division gets a five-day week wrong: it would count
+Fridays and Shabbatot that carry no quota, and land the siyum up to 40% early
+on a long tractate. Walking the calendar costs a few hundred iterations - far
+less than the round trip that delivers the answer.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core import clock
 from app.models import (
-    DayKind,
     PlanStatus,
     StudyPlan,
+    StudyWeek,
     Tractate,
     User,
     UserInventory,
     UserStats,
 )
-from app.services.calendar import classify_day, location_for, required_units_for
+from app.services.calendar import classify_day, required_units_for
 from app.services.study import StudyError
-from app.services.zmanim import Location
 
 #: Guard against goal=1 on a 1000-mishnah tractate producing an infinite walk.
 MAX_PROJECTION_DAYS = 365 * 10
+
+DAYS_PER_WEEK = {StudyWeek.SEVEN_DAYS: 7, StudyWeek.FIVE_DAYS: 5}
 
 
 @dataclass(slots=True)
@@ -49,52 +47,26 @@ def project_completion(
     remaining_units: int,
     daily_goal: int,
     start_date: date,
-    location: Location,
-    observes_shabbat: bool,
-    observes_yom_tov: bool = True,
-    credits_shabbat: bool = True,
+    study_week: StudyWeek,
 ) -> Projection:
-    """When will they finish?
-
-    `credits_shabbat=False` models a user who does not do the Friday double
-    portion - their Saturdays contribute nothing, so the estimate stretches.
-    """
+    """When will they finish?"""
     if remaining_units <= 0:
         return Projection(start_date, 0, 0, 0)
     if daily_goal <= 0:
         raise StudyError("invalid_goal", "daily goal must be at least 1")
 
     done = 0
-    done_before = 0
     study_days = 0
     end_date = start_date
 
     for offset in range(MAX_PROJECTION_DAYS):
         cursor = start_date + timedelta(days=offset)
-        kind = classify_day(cursor, location, observes_shabbat, observes_yom_tov)
-
-        capacity = required_units_for(kind, daily_goal)
-        if kind == DayKind.EREV_SHABBAT and not credits_shabbat:
-            capacity = daily_goal  # they only do Friday's own portion
-        if kind == DayKind.YOM_TOV:
-            capacity = 0
-
+        capacity = required_units_for(classify_day(cursor, study_week), daily_goal)
         if capacity:
-            done_before = done
             done += capacity
             study_days += 1
-
         if done >= remaining_units:
             end_date = cursor
-            # Friday's quota is Friday's *and* Shabbat's. If the last units
-            # come out of Shabbat's half, the siyum belongs on Shabbat - that
-            # is the day the ledger credits, and the day the user celebrates.
-            if (
-                kind == DayKind.EREV_SHABBAT
-                and credits_shabbat
-                and done_before + daily_goal < remaining_units
-            ):
-                end_date = cursor + timedelta(days=1)
             break
     else:  # pragma: no cover - only reachable with absurd inputs
         raise StudyError("projection_overflow", "goal too small to ever finish")
@@ -103,7 +75,7 @@ def project_completion(
         estimated_end_date=end_date,
         study_days=study_days,
         calendar_days=(end_date - start_date).days + 1,
-        units_per_week=daily_goal * 7,
+        units_per_week=daily_goal * DAYS_PER_WEEK[StudyWeek(study_week)],
     )
 
 
@@ -139,9 +111,7 @@ def create_plan(
         remaining_units=tractate.mishnayot_count,
         daily_goal=daily_goal,
         start_date=start_date,
-        location=location_for(user),
-        observes_shabbat=user.observes_shabbat,
-        observes_yom_tov=user.observes_yom_tov,
+        study_week=user.study_week,
     )
 
     plan = StudyPlan(
@@ -166,13 +136,14 @@ def change_goal(
 ) -> Projection:
     """Re-project from *today* with the remaining units.
 
-    Today's quota is updated too, but only while the day is still open. A day
-    that has already been resolved keeps the requirement it was judged
-    against — re-scoring a finished day is how you accidentally hand out (or
-    revoke) a streak someone already earned.
+    Today's row is refreshed too - both its quota and its kind, because this
+    also runs after the learner switches between a five- and a seven-day week
+    and today may have just become (or stopped being) a rest day. Only while
+    the day is still open: a day that has already been resolved keeps the
+    requirement it was judged against, since re-scoring a finished day is how
+    you accidentally hand out or revoke a streak someone already earned.
     """
     from app.models import DayStatus, StudyDay
-    from app.services.calendar import required_units_for
 
     tractate = session.get(Tractate, plan.tractate_id)
     plan.daily_goal = new_goal
@@ -181,20 +152,18 @@ def change_goal(
         select(StudyDay).where(
             StudyDay.user_id == user.id,
             StudyDay.local_date == today,
-            StudyDay.status.in_([DayStatus.PENDING, DayStatus.SHABBAT_PENDING]),
+            StudyDay.status == DayStatus.PENDING,
         )
     ).scalar_one_or_none()
     if open_today is not None:
-        open_today.required_units = required_units_for(
-            open_today.day_kind, new_goal
-        )
+        open_today.day_kind = classify_day(today, user.study_week)
+        open_today.required_units = required_units_for(open_today.day_kind, new_goal)
+
     projection = project_completion(
         remaining_units=tractate.mishnayot_count - plan.current_ordinal,
         daily_goal=new_goal,
         start_date=today,
-        location=location_for(user),
-        observes_shabbat=user.observes_shabbat,
-        observes_yom_tov=user.observes_yom_tov,
+        study_week=user.study_week,
     )
     plan.estimated_end_date = projection.estimated_end_date
     return projection

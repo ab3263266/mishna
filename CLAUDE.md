@@ -33,17 +33,44 @@ will bite you:
   settlement safe to run from a request and a cron simultaneously.
 - **A day is a local date with a 03:00 rollover**, not a UTC date. Always go
   through `UserClock`; never call `.date()` on a timestamp.
-- **Shabbat holds the streak, it does not advance it.** The difference between
-  "unchanged" and "reset to 0" is the entire Sabbath-mode feature.
-- **Friday credits before Shabbat.** The second day scores at the tier the
-  first just unlocked.
-- **Never do network I/O inside a write transaction.** This already caused
-  "database is locked" once: `/study/portion` settled (a write) and then made
-  16 Sefaria calls with the transaction open. Commit the business work first;
-  the text cache writes through its own short transactions.
+- **The only calendar rule is `User.study_week`**: seven days, or five
+  (Sunday–Thursday, with Friday and Shabbat as rest days). There is no zmanim,
+  no Hebrew calendar, and no special handling of Shabbat anywhere else. A rest
+  day requires nothing and holds the streak, but still credits if the learner
+  studies anyway.
 - **Points move only through `ledger.post_transaction`**, with a deterministic
   `idempotency_key`. A `None` return means "already applied" — do not move the
   balance again.
+- **Nothing on a request path touches the network.** The texts are files.
+- **Sign-in must not write profile fields.** Two accepted ways in — email and
+  password (scrypt, stdlib) or Google — and neither may touch `study_week`,
+  `daily_goal` or anything else the learner chose. A login handler that
+  defaults a field silently resets it on every visit; that already happened
+  once.
+- **Login failures say one thing.** A wrong password and an unknown address
+  return the identical body *and* take the same time, or the form becomes a
+  directory of who has an account.
+
+## The texts are data, not a service
+
+`app/data/texts/<slug>.json.gz` — 63 committed files, ~11 MB, one per tractate,
+produced by `scripts/fetch_texts.py` and read straight off disk by
+`app/services/texts.py`. Do not reintroduce a live Sefaria call or a cache
+table: the study screen has to render on a train.
+
+Two traps if you ever re-run the fetch script:
+
+- **A commentary's numbering is not the mishnah's.** `Yachin on Mishnah
+  Berakhot 1:13` is the thirteenth comment *in chapter 1*, which lands on
+  mishnah 2. Anchoring must go through Sefaria's `/api/links` graph. Indexing
+  by position returns wrong text with no error.
+- **No single Sefaria edition is complete**, and the biggest books time out.
+  The script layers editions and falls back to chapter-by-chapter fetching;
+  `tests/test_texts.py` checks the committed result rather than trusting it.
+
+`mishnayot.ordinal` is the join between the database and those files. If the
+two disagree, learners are shown a different mishnah from the one their
+progress says they are on.
 
 ## Conventions
 

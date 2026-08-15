@@ -114,7 +114,9 @@ def test_a_day_row_from_another_plan_uses_the_current_goal(session):
     assert len(_portion_ordinals(session, new_plan, day)) == 3
 
 
-def test_shabbat_requires_nothing_so_the_portion_is_empty(session):
+def test_a_rest_day_still_previews_the_daily_goal(session):
+    """A rest day requires nothing, but the portion stays on screen: reading it
+    is optional, not forbidden, and an empty study tab reads as broken."""
     plan = make_plan(session, current_ordinal=10, goal=2)
     day = make_day(session, plan, required=0, completed=0)
-    assert _portion_ordinals(session, plan, day) == []
+    assert _portion_ordinals(session, plan, day) == [11, 12]

@@ -58,17 +58,11 @@ class Settings(BaseSettings):
 
     base_points: int = 10
     miss_penalty: int = 15
-    motash_bonus: int = 5
     streak_freeze_cost: int = 120
 
+    #: A day ends at 03:00 local, not midnight: study logged at 01:30 belongs
+    #: to the evening that just ended.
     day_rollover_hour: int = 3
-    shabbat_report_grace_days: int = 1
-    pre_shabbat_freeze_minutes: int = 60
-
-    # Fallback Shabbat window when no zmanim library / no user location is
-    # available. Local wall-clock times.
-    fallback_shabbat_onset_hour: int = 18
-    fallback_shabbat_end_hour: int = 20
 
     # Safety valve: a user returning after two years should not make the
     # settlement loop walk 700 days inside a request.

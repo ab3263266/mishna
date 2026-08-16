@@ -57,6 +57,14 @@ def check(settings: Settings) -> list[str]:
             "which the streak logic relies on under concurrency. Use PostgreSQL."
         )
 
+    if public and not (settings.owner_name and settings.contact_email):
+        warnings.append(
+            "OWNER_NAME / CONTACT_EMAIL are unset, so the privacy policy, the "
+            "accessibility statement and the copyright notice all name nobody "
+            "and give no address to write to. Those pages exist to be acted "
+            "on; set both."
+        )
+
     if public and not settings.google_client_id:
         warnings.append(
             "GOOGLE_CLIENT_ID is unset, so email and password is the only way "

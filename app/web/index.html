@@ -158,6 +158,8 @@
       color:var(--muted);font-size:12px}
   .or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
   #pw-hint.bad{color:var(--bad)}
+  .legal-links{text-align:center;color:var(--muted);font-size:12.5px;margin-top:14px}
+  .legal-links a{color:var(--muted)}
   .siyum{background:color-mix(in srgb,var(--good) 12%,var(--card));
          border-color:color-mix(in srgb,var(--good) 40%,var(--line));text-align:center}
   .siyum h2{font-size:21px;margin-bottom:6px}
@@ -213,6 +215,10 @@
         ההתחברות אינה מוגדרת בשרת.
       </p>
     </div>
+    <p class="legal-links">
+      בהרשמה אתה מאשר את <a href="/terms">תנאי השימוש</a>
+      ואת <a href="/privacy">מדיניות הפרטיות</a>.
+    </p>
   </section>
 
   <section id="screen-onboarding" class="hidden">
@@ -400,6 +406,20 @@
         <button class="danger wide" style="margin-top:12px" onclick="logout()">
           יציאה מהחשבון
         </button>
+      </div>
+
+      <div class="card">
+        <h2>מידע משפטי</h2>
+        <p class="sub">
+          <a href="/privacy">מדיניות פרטיות</a> ·
+          <a href="/terms">תנאי שימוש</a> ·
+          <a href="/accessibility">הצהרת נגישות</a> ·
+          <a href="/credits">מקורות ורישיונות</a>
+        </p>
+        <p class="sub" style="margin-top:8px">
+          הטקסטים מ<a href="https://www.sefaria.org" target="_blank" rel="noopener">ספריא</a>.
+          חלק מהפירושים תחת רישיון CC-BY-NC — שימוש לא־מסחרי בלבד.
+        </p>
       </div>
 
       <details class="card">

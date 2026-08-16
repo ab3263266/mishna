@@ -33,6 +33,13 @@ class Settings(BaseSettings):
     #: Where the browser lands after a successful Google sign-in.
     public_base_url: str = "http://localhost:8010"
 
+    #: Named on the legal pages as the party responsible for the service and
+    #: the address that privacy, accessibility and copyright requests go to.
+    #: A privacy policy with nobody to write to is not a privacy policy, so
+    #: preflight warns when these are unset on a public host.
+    owner_name: str = ""
+    contact_email: str = ""
+
     #: Set false only when serving over plain HTTP locally; the refresh-token
     #: cookie is otherwise marked Secure.
     cookie_secure: bool = True

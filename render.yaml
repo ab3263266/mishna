@@ -35,6 +35,12 @@ services:
         value: "false"
       - key: PUBLIC_BASE_URL
         sync: false        # https://<your-app>.onrender.com
+      # Named on the privacy policy, the accessibility statement and the
+      # copyright notice, and the address requests under them go to.
+      - key: OWNER_NAME
+        sync: false
+      - key: CONTACT_EMAIL
+        sync: false
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: GOOGLE_CLIENT_SECRET

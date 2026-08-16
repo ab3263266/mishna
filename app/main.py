@@ -5,7 +5,7 @@ import pathlib
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 
 from app.api.auth_google import router as google_router
 from app.api.routes import router
@@ -65,3 +65,41 @@ def health() -> dict:
 @app.get("/", include_in_schema=False)
 def index() -> FileResponse:
     return FileResponse(WEB_DIR / "index.html")
+
+
+# --------------------------------------------------------------------------- #
+# Legal pages
+# --------------------------------------------------------------------------- #
+
+LEGAL_DIR = WEB_DIR / "legal"
+LEGAL_PAGES = ("privacy", "terms", "accessibility", "credits")
+
+
+def _legal_page(name: str) -> HTMLResponse:
+    """Serve a legal page with the operator's details filled in.
+
+    The contact address is substituted at request time rather than written
+    into the files, so it lives in one place and can be set per deployment.
+    Left unset it renders visibly blank rather than as a plausible-looking
+    address that nobody reads.
+    """
+    settings = get_settings()
+    html = (LEGAL_DIR / f"{name}.html").read_text(encoding="utf-8")
+    html = html.replace("{{owner_name}}", settings.owner_name or "— טרם הוגדר —")
+    html = html.replace("{{contact_email}}", settings.contact_email or "— טרם הוגדר —")
+    return HTMLResponse(html)
+
+
+for _page in LEGAL_PAGES:
+    app.add_api_route(
+        f"/{_page}",
+        (lambda name: lambda: _legal_page(name))(_page),
+        methods=["GET"],
+        include_in_schema=False,
+        response_class=HTMLResponse,
+    )
+
+
+@app.get("/legal.css", include_in_schema=False)
+def legal_css() -> FileResponse:
+    return FileResponse(LEGAL_DIR / "legal.css", media_type="text/css")

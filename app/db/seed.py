@@ -13,7 +13,7 @@ import json
 import logging
 import pathlib
 
-from sqlalchemy import func, select
+from sqlalchemy import func, insert, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -26,6 +26,20 @@ DATA_FILE = pathlib.Path(__file__).parent.parent / "data" / "tractates.json"
 
 
 def seed_tractates(session: Session) -> int:
+    """Insert any tractate that is not already there.
+
+    Two things matter here because this runs on the boot path, before uvicorn
+    binds a port, against a database that is one network hop away:
+
+    * **Bulk inserts.** 4,192 mishnayot added one ORM object at a time is 4,192
+      chances to pay a round trip. A single `insert()` per tractate is 63
+      statements instead, and turns a cold start that a health check can time
+      out into a couple of seconds.
+    * **A commit per tractate.** If the process is killed halfway - which is
+      exactly what an impatient platform does to a slow first boot - one big
+      transaction rolls back and the next attempt starts from nothing, forever.
+      Committing as we go means every restart resumes.
+    """
     payload = json.loads(DATA_FILE.read_text(encoding="utf-8"))
     existing = {
         slug for (slug,) in session.execute(select(Tractate.slug)).all()
@@ -51,20 +65,21 @@ def seed_tractates(session: Session) -> int:
 
         # `ordinal` is a running 1-based index across the whole tractate, which
         # is what turns "where am I" into a single integer compare.
+        rows = []
         ordinal = 0
         for chapter_no, chapter_len in enumerate(entry["chapter_lengths"] or [], 1):
             for mishnah_no in range(1, chapter_len + 1):
                 ordinal += 1
-                session.add(
-                    Mishnah(
-                        tractate_id=tractate.id,
-                        chapter=chapter_no,
-                        number=mishnah_no,
-                        ordinal=ordinal,
-                        sefaria_ref=(
+                rows.append(
+                    {
+                        "tractate_id": tractate.id,
+                        "chapter": chapter_no,
+                        "number": mishnah_no,
+                        "ordinal": ordinal,
+                        "sefaria_ref": (
                             f"{tractate.sefaria_title} {chapter_no}:{mishnah_no}"
                         ),
-                    )
+                    }
                 )
 
         if ordinal and ordinal != tractate.mishnayot_count:
@@ -72,6 +87,9 @@ def seed_tractates(session: Session) -> int:
                 f"{entry['slug']}: generated {ordinal} mishnayot but the "
                 f"tractate declares {tractate.mishnayot_count}"
             )
+        if rows:
+            session.execute(insert(Mishnah), rows)
+        session.commit()
         added += 1
 
     return added

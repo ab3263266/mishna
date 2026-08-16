@@ -40,11 +40,12 @@ DATA_DIR = pathlib.Path(__file__).parent.parent / "data" / "texts"
 class Commentator:
     key: str
     name_he: str
-    #: Sefaria book title template. `{book}` is the tractate's Sefaria title,
-    #: "Mishnah " prefix included. Formatting it gives the `index_title` that
-    #: identifies this commentary in Sefaria's link graph, which is how the
-    #: fetch script decides what belongs to which mishnah.
-    book_template: str
+    #: Sefaria's `collectiveTitle.en`, which is how a commentary is identified
+    #: in the link graph. Deliberately not the index title: that varies by
+    #: tractate - "Bartenura on Mishnah Berakhot" but "Bartenura on Pirkei
+    #: Avot" - and assuming it could be built from a template is what left
+    #: Avot, the most studied tractate of the lot, with no commentaries at all.
+    collective_title: str
     note: str = ""
 
 
@@ -52,14 +53,12 @@ class Commentator:
 #: it is the one people mean by "the commentary", then the Rambam, then the
 #: heavier iyun material. The UI opens the first and collapses the rest.
 COMMENTATORS: tuple[Commentator, ...] = (
-    Commentator("bartenura", "ברטנורא", "Bartenura on {book}"),
-    Commentator("rambam", "פירוש הרמב״ם", "Rambam on {book}"),
-    Commentator("ikar_tosafot", "עיקר תוספות יום טוב",
-                "Ikar Tosafot Yom Tov on {book}"),
-    Commentator("tosafot_yom_tov", "תוספות יום טוב",
-                "Tosafot Yom Tov on {book}"),
-    Commentator("yachin", "תפארת ישראל – יכין", "Yachin on {book}"),
-    Commentator("boaz", "תפארת ישראל – בועז", "Boaz on {book}"),
+    Commentator("bartenura", "ברטנורא", "Bartenura"),
+    Commentator("rambam", "פירוש הרמב״ם", "Rambam"),
+    Commentator("ikar_tosafot", "עיקר תוספות יום טוב", "Ikar Tosafot Yom Tov"),
+    Commentator("tosafot_yom_tov", "תוספות יום טוב", "Tosafot Yom Tov"),
+    Commentator("yachin", "תפארת ישראל – יכין", "Yachin"),
+    Commentator("boaz", "תפארת ישראל – בועז", "Boaz"),
 )
 COMMENTATORS_BY_KEY = {c.key: c for c in COMMENTATORS}
 
@@ -220,11 +219,14 @@ def get_mishnah(
             if not body:
                 continue
             source = sources.get(commentator.key, {})
+            # The book title is recorded per tractate by the fetch script,
+            # because it is not derivable: Sefaria files this commentary under
+            # "… on Mishnah Berakhot" but "… on Pirkei Avot".
+            book = source.get("index_title") or corpus["book"]
             commentaries.append(
                 _passage(
                     commentator.key,
-                    commentator.book_template.format(book=corpus["book"])
-                    + f" {entry['chapter']}:{entry['number']}",
+                    f"{book} {entry['chapter']}:{entry['number']}",
                     None,
                     body,
                     source,

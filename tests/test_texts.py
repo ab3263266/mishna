@@ -172,4 +172,32 @@ def test_bartenura_is_first_so_the_ui_opens_it_by_default() -> None:
 
 def test_the_english_commentary_is_gone() -> None:
     """Every commentary shipped is Hebrew; the UI has no LTR path left."""
-    assert all("English" not in c.book_template for c in COMMENTATORS)
+    assert all("English" not in c.collective_title for c in COMMENTATORS)
+
+
+@pytest.mark.parametrize("entry", TRACTATES, ids=lambda e: e["slug"])
+def test_no_tractate_is_missing_its_commentaries(entry: dict) -> None:
+    """A tractate with none at all is not a quiet gap, it is a broken import.
+
+    Both cases that happened were naming: Sefaria files Avot's commentaries
+    under "Pirkei Avot" rather than "Mishnah Avot", and the fetch script built
+    the title from a template. Avot and Taanit shipped completely bare and
+    nothing failed - the study screen simply showed the mishnah alone.
+    """
+    corpus = texts._load(entry["slug"])
+    assert corpus is not None
+
+    present = {k for m in corpus["mishnayot"] for k in m["commentaries"]}
+    assert present, f"{entry['slug']} has no commentaries at all"
+    assert len(present) >= 3, f"{entry['slug']} has only {sorted(present)}"
+
+    # The commonest commentary should reach most of the tractate.
+    counts = {
+        key: sum(1 for m in corpus["mishnayot"] if key in m["commentaries"])
+        for key in present
+    }
+    best = max(counts.values())
+    assert best >= len(corpus["mishnayot"]) * 0.5, (
+        f"{entry['slug']}: best commentary covers {best}/"
+        f"{len(corpus['mishnayot'])} mishnayot"
+    )

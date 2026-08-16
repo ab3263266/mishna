@@ -46,7 +46,7 @@ import pathlib
 import re
 import sys
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from urllib.parse import quote
 
 import httpx
@@ -81,7 +81,6 @@ DATA_DIR = pathlib.Path(__file__).resolve().parent.parent / "app" / "data"
 OUT_DIR = DATA_DIR / "texts"
 
 _ADDRESS = re.compile(r"^(\d+)(?:-(\d+))?$")
-TEMPLATE_BY_KEY = {c.key: c.book_template for c in COMMENTATORS}
 
 #: Distinguishes "the server would not answer" from "there is no such book".
 #: They need opposite handling: one is worth retrying a different way, the
@@ -194,6 +193,16 @@ def licence_allowed(licence: str | None) -> bool:
     return licence_rank(licence) <= MAX_LICENCE_RANK
 
 
+_NIKUD = re.compile(r"[֑-ׇ]")
+
+
+def vowel_count(edition: dict) -> int:
+    """How pointed an edition is, from a sample. Used only to break a tie
+    between editions whose licences are equally free."""
+    sample = json.dumps(edition.get("text"), ensure_ascii=False)[:40000]
+    return len(_NIKUD.findall(sample))
+
+
 def fetch_segments(
     client: httpx.Client, title: str, needed: set[tuple[int, ...]], chapters: int
 ) -> tuple[dict[tuple[int, ...], str], dict, dict | None]:
@@ -215,6 +224,32 @@ def fetch_segments(
         if other["title"] != probe["version"]:
             candidates.append(other)
     candidates.sort(key=lambda c: licence_rank(c["license"]))
+    fetched: dict[str, dict] = {probe["version"]: probe}
+
+    # Among editions with equally free licences, prefer the vocalised one.
+    # Sefaria carries a pointed Public Domain "ToratEmet" of Bartenura and Ikar
+    # Tosafot Yom Tov for Avot - the most-studied tractate of the lot - beside
+    # an unpointed "On Your Way", and licence alone cannot tell them apart.
+    best = licence_rank(candidates[0]["license"])
+    head = [c for c in candidates if licence_rank(c["license"]) == best]
+    if len(head) > 1 and licence_allowed(candidates[0]["license"]):
+        scored = []
+        for candidate in head[:3]:
+            edition = (
+                probe if candidate["title"] == probe["version"]
+                else fetch_edition(client, title, f"hebrew|{candidate['title']}",
+                                   chapters)
+            )
+            if edition is not None:
+                fetched[candidate["title"]] = edition
+                scored.append((vowel_count(edition), candidate))
+        if scored:
+            scored.sort(key=lambda pair: -pair[0])
+            if scored[0][0] > 0:
+                print(f"    · {title}: preferring vocalised "
+                      f"{scored[0][1]['title']!r}")
+            reordered = [c for _, c in scored]
+            candidates = reordered + [c for c in candidates if c not in reordered]
 
     found: dict[tuple[int, ...], str] = {}
     used: list[dict] = []
@@ -241,10 +276,11 @@ def fetch_segments(
             skipped.append(f"{candidate['title']} ({candidate['license']})")
             continue
         tried += 1
-        edition = (
-            probe if candidate["title"] == probe["version"]
-            else fetch_edition(client, title, f"hebrew|{candidate['title']}", chapters)
-        )
+        edition = fetched.get(candidate["title"])
+        if edition is None:
+            edition = fetch_edition(
+                client, title, f"hebrew|{candidate['title']}", chapters
+            )
         if edition is not None and absorb(edition):
             print(f"    + {title}: {len(found)}/{len(needed)} "
                   f"from {candidate['title']!r} ({candidate['license']})")
@@ -265,15 +301,18 @@ def fetch_segments(
 # --------------------------------------------------------------------------- #
 
 
-def addresses(ref: str, index_title: str) -> list[tuple[int, ...]]:
+def addresses(ref: str, index_title: str | None = None) -> list[tuple[int, ...]]:
     """The numeric address(es) a ref points at, e.g. 'X 1:13:2' -> [(1, 13, 2)].
+
+    Read off the end of the ref rather than by stripping a known prefix. The
+    prefix is not reliably known: Avot's commentary links anchor to "Pirkei
+    Avot 1:1" while the tractate is "Mishnah Avot", so prefix-matching returned
+    nothing and the tractate silently shipped without commentaries.
 
     Ranged refs ('1:13:1-3') expand to every address they cover, because a
     commentary segment is sometimes filed as one link spanning several pieces.
     """
-    if not ref.startswith(index_title):
-        return []
-    tail = ref[len(index_title):].strip()
+    tail = ref.rsplit(" ", 1)[-1] if " " in ref else ""
     if not tail:
         return []
 
@@ -290,7 +329,7 @@ def addresses(ref: str, index_title: str) -> list[tuple[int, ...]]:
     return [tuple(combo) for combo in itertools.product(*spans)]
 
 
-def first_address(ref: str, index_title: str) -> tuple[int, ...]:
+def first_address(ref: str, index_title: str | None = None) -> tuple[int, ...]:
     found = addresses(ref, index_title)
     return found[0] if found else ()
 
@@ -311,15 +350,23 @@ def at(nested: object, address: tuple[int, ...]) -> object | None:
 
 
 def collect_links(
-    client: httpx.Client, book: str, chapters: int, wanted: dict[str, str]
-) -> dict[tuple[int, int], dict[str, list[str]]]:
-    """{(chapter, mishnah): {commentator_key: [refs]}} for the whole tractate.
+    client: httpx.Client, book: str, chapters: int
+) -> tuple[dict[tuple[int, int], dict[str, list[str]]], dict[str, str]]:
+    """({(chapter, mishnah): {key: [refs]}}, {key: index_title}).
+
+    Commentaries are matched on `collectiveTitle`, which is stable, and the
+    index title is read back off the link rather than assumed. Building it from
+    a template instead ("<name> on Mishnah <tractate>") silently produced
+    nothing for Avot, which Sefaria files as "<name> on Pirkei Avot" - so the
+    most-studied tractate in the Shas shipped with no commentaries at all.
 
     `with_text=0` matters: the same response with text attached is six times
     the size and eight times slower, and the commentary books are fetched in
     full anyway.
     """
+    by_collective = {c.collective_title: c.key for c in COMMENTATORS}
     anchored: dict[tuple[int, int], dict[str, list[str]]] = {}
+    index_titles: dict[str, Counter] = defaultdict(Counter)
     seen: set[tuple[int, int, str, str]] = set()
 
     for chapter in range(1, chapters + 1):
@@ -332,12 +379,14 @@ def collect_links(
         for link in links:
             if not isinstance(link, dict) or link.get("category") != "Commentary":
                 continue
-            key = wanted.get(link.get("index_title") or "")
+            key = by_collective.get((link.get("collectiveTitle") or {}).get("en"))
             if key is None:
                 continue
             ref = link.get("ref")
             if not ref:
                 continue
+            if link.get("index_title"):
+                index_titles[key][link["index_title"]] += 1
 
             expanded = link.get("anchorRefExpanded") or [link.get("anchorRef")]
             for anchor in expanded:
@@ -352,7 +401,8 @@ def collect_links(
                     seen.add(marker)
                     anchored.setdefault(address, {}).setdefault(key, []).append(ref)
 
-    return anchored
+    titles = {key: counts.most_common(1)[0][0] for key, counts in index_titles.items()}
+    return anchored, titles
 
 
 def build(client: httpx.Client, entry: dict) -> dict | None:
@@ -360,11 +410,7 @@ def build(client: httpx.Client, entry: dict) -> dict | None:
     chapters = entry["chapter_count"]
     print(f"  {entry['slug']:<16} {book}")
 
-    titles = {key: template.format(book=book)
-              for key, template in TEMPLATE_BY_KEY.items()}
-    anchored = collect_links(
-        client, book, chapters, {title: key for key, title in titles.items()}
-    )
+    anchored, titles = collect_links(client, book, chapters)
 
     # The mishnah itself. Every address is expected to exist; a gap here is a
     # blank study screen, which is why the layering above matters.
@@ -392,6 +438,9 @@ def build(client: httpx.Client, entry: dict) -> dict | None:
     sources = {"mishnah": mishnah_source}
     for commentator in COMMENTATORS:
         key = commentator.key
+        if key not in titles:
+            print(f"    - no {key}")
+            continue
         found, source, edition = fetch_segments(
             client, titles[key], wanted_by_key.get(key, set()), chapters
         )
@@ -399,7 +448,9 @@ def build(client: httpx.Client, entry: dict) -> dict | None:
             print(f"    - no {key}")
             continue
         segments[key] = found
-        sources[key] = source
+        # The index title travels with the text: the app builds each
+        # commentary's Sefaria reference from it, and it is not derivable.
+        sources[key] = source | {"index_title": titles[key]}
 
     he_title = primary["he_title"]
     mishnayot: list[dict] = []

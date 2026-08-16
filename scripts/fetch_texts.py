@@ -28,6 +28,12 @@ a silently wrong or missing text before it was handled:
 3. **The largest books time out.** A whole-book request for Tosafot Yom Tov on
    Chullin returns 504 however long you wait, so a book that fails whole is
    re-fetched a chapter at a time.
+
+4. **The primary edition is not the freest one.** Sefaria serves Bartenura and
+   Ikar Tosafot Yom Tov from a CC-BY-NC edition by default, with a Public
+   Domain edition of the same commentary sitting right behind it. Taking the
+   default imported a non-commercial restriction across the whole corpus for
+   nothing, so editions are now chosen by licence - see MAX_LICENCE_RANK.
 """
 
 from __future__ import annotations
@@ -35,6 +41,7 @@ from __future__ import annotations
 import gzip
 import itertools
 import json
+import os
 import pathlib
 import re
 import sys
@@ -56,7 +63,19 @@ PAUSE = 0.25
 #: How many alternate editions to try when the primary leaves gaps. Some gaps
 #: are real - a commentator who simply did not comment there - and without a
 #: cap those would send us through every edition Sefaria holds.
-MAX_ALTERNATES = 3
+MAX_ALTERNATES = 4
+
+#: How restrictive a licence may be before the text is left out.
+#:
+#: 1 - Public Domain, CC0 and CC-BY only. The default, and the reason for all
+#:     of this: a CC-BY-NC text quietly forbids ever charging for the service,
+#:     selling it to a school, or putting an advert beside it, and CC-BY-SA
+#:     drags its share-alike clause into whatever it is combined with. Neither
+#:     is a decision worth inheriting from whichever edition Sefaria happens
+#:     to serve first.
+#: 2 - also accept CC-BY-SA (commercial use fine, derivatives must match).
+#: 3 - accept anything, CC-BY-NC included. The fullest text, the fewest rights.
+MAX_LICENCE_RANK = int(os.environ.get("MAX_LICENCE_RANK", "1"))
 
 DATA_DIR = pathlib.Path(__file__).resolve().parent.parent / "app" / "data"
 OUT_DIR = DATA_DIR / "texts"
@@ -112,7 +131,7 @@ def _edition(payload, chapters_fetched: list | None = None) -> dict | None:
         "version": version.get("versionTitle"),
         "he_title": payload.get("heTitle") or "",
         "available": [
-            v.get("versionTitle")
+            {"title": v.get("versionTitle"), "license": v.get("license")}
             for v in payload.get("available_versions") or []
             if v.get("language") == "he" and v.get("versionTitle")
         ],
@@ -155,18 +174,51 @@ def fetch_edition(
     return _edition(header, chapters_fetched=parts)
 
 
+def licence_rank(licence: str | None) -> int:
+    """Lower is freer. Sefaria serves whichever edition it considers primary,
+    and for Bartenura and Ikar Tosafot Yom Tov that happens to be a CC-BY-NC
+    one - while a Public Domain edition of the same commentary sits right
+    behind it. Taking the default therefore imported a non-commercial
+    restriction over the whole corpus for no reason at all."""
+    value = (licence or "").strip().lower()
+    if value.startswith("public domain") or value == "cc0":
+        return 0
+    if value.startswith("cc-by-sa"):          # commercial ok, but viral
+        return 2
+    if value.startswith("cc-by"):             # not -nc, checked after -sa above
+        return 1 if "-nc" not in value else 3
+    return 3                                  # CC-BY-NC, unknown, anything else
+
+
+def licence_allowed(licence: str | None) -> bool:
+    return licence_rank(licence) <= MAX_LICENCE_RANK
+
+
 def fetch_segments(
     client: httpx.Client, title: str, needed: set[tuple[int, ...]], chapters: int
 ) -> tuple[dict[tuple[int, ...], str], dict, dict | None]:
-    """{address: body} for as many of `needed` as any Hebrew edition holds."""
+    """{address: body} for as many of `needed` as any usable Hebrew edition holds.
+
+    Editions are tried freest-licence first, and restricted ones are skipped
+    entirely unless ALLOW_RESTRICTED is set. A gap is recoverable - a licence
+    that forbids the thing you want to do with the corpus is not.
+    """
     if not needed:
         return {}, {}, None
-    primary = fetch_edition(client, title, "source", chapters)
-    if primary is None:
+    probe = fetch_edition(client, title, "source", chapters)
+    if probe is None:
         return {}, {}, None
+
+    # The probe's own edition, plus every other Hebrew one, ordered by licence.
+    candidates = [{"title": probe["version"], "license": probe["license"]}]
+    for other in probe["available"]:
+        if other["title"] != probe["version"]:
+            candidates.append(other)
+    candidates.sort(key=lambda c: licence_rank(c["license"]))
 
     found: dict[tuple[int, ...], str] = {}
     used: list[dict] = []
+    skipped: list[str] = []
 
     def absorb(edition: dict) -> int:
         filled = 0
@@ -181,24 +233,31 @@ def fetch_segments(
             used.append(edition)
         return filled
 
-    absorb(primary)
-
     tried = 0
-    for alternate in primary["available"]:
+    for candidate in candidates:
         if len(found) >= len(needed) or tried >= MAX_ALTERNATES:
             break
-        if alternate == primary["version"]:
+        if not licence_allowed(candidate["license"]):
+            skipped.append(f"{candidate['title']} ({candidate['license']})")
             continue
         tried += 1
-        edition = fetch_edition(client, title, f"hebrew|{alternate}", chapters)
+        edition = (
+            probe if candidate["title"] == probe["version"]
+            else fetch_edition(client, title, f"hebrew|{candidate['title']}", chapters)
+        )
         if edition is not None and absorb(edition):
-            print(f"    + {title}: {len(found)}/{len(needed)} with {alternate!r}")
+            print(f"    + {title}: {len(found)}/{len(needed)} "
+                  f"from {candidate['title']!r} ({candidate['license']})")
+
+    if skipped and len(found) < len(needed):
+        print(f"    ! {title}: {len(needed) - len(found)} segments missing; "
+              f"skipped restricted {', '.join(skipped)}")
 
     source = {
         "license": " · ".join(dict.fromkeys(e["license"] for e in used if e["license"])),
         "version": " · ".join(dict.fromkeys(e["version"] for e in used if e["version"])),
     }
-    return found, source, primary
+    return found, source, probe
 
 
 # --------------------------------------------------------------------------- #

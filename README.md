@@ -198,13 +198,15 @@ The part people come for. Downloaded from Sefaria **once**, by
 a file and reads a dict. There is no network call, no cache table, and nothing
 to warm.
 
-| Commentary | Sefaria index | Licence |
+| Commentary | Sefaria index | Edition shipped |
 |---|---|---|
-| ברטנורא | `Bartenura on {book}` | CC-BY-NC |
-| פירוש הרמב״ם | `Rambam on …` | Public Domain |
-| עיקר תוספות יום טוב | `Ikar Tosafot Yom Tov on …` | CC-BY-NC |
-| תוספות יום טוב | `Tosafot Yom Tov on …` | Public Domain |
-| תפארת ישראל – יכין / בועז | `Yachin on …` / `Boaz on …` | Public Domain |
+| ברטנורא | `Bartenura on {book}` | On Your Way |
+| פירוש הרמב״ם | `Rambam on …` | Vilna |
+| עיקר תוספות יום טוב | `Ikar Tosafot Yom Tov on …` | On Your Way |
+| תוספות יום טוב | `Tosafot Yom Tov on …` | Romm, Vilna 1913 |
+| תפארת ישראל – יכין / בועז | `Yachin on …` / `Boaz on …` | Romm, Vilna 1913 |
+
+Every one of them Public Domain — see below, because that took deciding.
 
 **Shipping the corpus beats caching it.** The texts are centuries old and never
 change, so the only thing a live API gives you is a dependency that fails on a
@@ -222,6 +224,23 @@ on mishnah 3" returns real, well-formed, **wrong** text — no error, nothing to
 notice. The fetch script asks `/api/links` for each chapter and uses the
 `anchorRef → ref` mapping instead, then joins every segment anchored to a given
 mishnah in ref order.
+
+**The primary edition is not the freest one, and that is a business decision
+hiding in a data-fetching script.** Sefaria serves Bartenura and Ikar Tosafot
+Yom Tov from a CC-BY-NC edition by default — with a Public Domain edition of
+the same commentary sitting right behind it in `available_versions`. Taking the
+default imposed "non-commercial use only" on the entire corpus, which quietly
+rules out ever charging for the service, selling it to a school, or putting an
+advert beside it. Nothing about that shows up as a bug; it would surface years
+later, to whoever tried.
+
+So editions are chosen by licence (`MAX_LICENCE_RANK`), freest first, and
+restricted ones are skipped even at the cost of a gap. The default admits
+Public Domain, CC0 and CC-BY, and rejects both `-nc` (no commercial use) and
+`-sa` (share-alike, which is viral into whatever it is combined with). The
+whole price was one mishnah: Yachin on Chullin 7:2, which only the CC-BY-SA
+Wikisource edition covers. `tests/test_texts.py` asserts the property across
+all 63 files so a careless re-fetch cannot quietly give it back.
 
 **No single edition is complete**, so editions are layered. Mishnah Bikkurim's
 primary version is the one printed with the Gemara and holds only chapter 4;

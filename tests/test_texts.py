@@ -98,6 +98,26 @@ def test_ordinals_line_up_with_the_seed_data(entry: dict) -> None:
     assert first.text and first.text.body, "the first mishnah has no text"
 
 
+@pytest.mark.parametrize("entry", TRACTATES, ids=lambda e: e["slug"])
+def test_every_shipped_text_permits_commercial_use(entry: dict) -> None:
+    """The corpus must stay free of CC-BY-NC and CC-BY-SA.
+
+    Sefaria serves Bartenura and Ikar Tosafot Yom Tov from a CC-BY-NC edition
+    by default, so a careless re-fetch silently reimposes "non-commercial only"
+    across the whole app - and share-alike drags its own clause into whatever
+    the text is combined with. Neither shows up as a bug; both would only be
+    discovered by whoever eventually tries to charge for this.
+    """
+    corpus = texts._load(entry["slug"])
+    assert corpus is not None
+
+    for key, source in corpus["sources"].items():
+        licence = (source.get("license") or "").strip().lower()
+        assert licence, f"{entry['slug']}/{key} ships with no stated licence"
+        assert "-nc" not in licence, f"{entry['slug']}/{key} is {licence}"
+        assert "-sa" not in licence, f"{entry['slug']}/{key} is {licence}"
+
+
 def test_a_mishnah_carries_its_commentaries_and_their_licence() -> None:
     view = texts.get_mishnah(FakeTractate("berakhot"), 1)
     keys = {c.key for c in view.commentaries}

@@ -56,6 +56,12 @@
   .mishnah{background:var(--card);border:1px solid var(--line);border-radius:14px;
            padding:24px;margin-bottom:16px;box-shadow:var(--shadow)}
   .mishnah.done{border-color:color-mix(in srgb,var(--good) 45%,var(--line))}
+  /* Beyond today's quota - dashed, so it reads as a bonus rather than as
+     something the day is waiting on. */
+  .mishnah.extra{border-style:dashed;
+                 border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+  .mishnah.extra .mishnah-head::after{content:"נוספת";font-size:11px;
+    color:var(--accent);font-weight:700;margin-inline-start:auto}
   .mishnah-head{display:flex;align-items:baseline;gap:10px;margin-bottom:15px;
                 padding-bottom:11px;border-bottom:2px solid var(--rule)}
   .mishnah-head h2{margin:0;font-size:17px}
@@ -104,6 +110,9 @@
   .trac .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .trac .nm .badge{font-size:10px;background:var(--accent);color:var(--accent-ink);
                    padding:1px 6px;border-radius:4px;margin-inline-start:6px;font-weight:700}
+  /* Learned before this app, not tracked by it. Quieter than "נוכחית". */
+  .trac .nm .badge.prior{background:transparent;color:var(--muted);
+                         border:1px solid var(--line);font-weight:600}
   .bar{width:96px;height:7px;border-radius:99px;background:var(--line);overflow:hidden;flex:none}
   .bar i{display:block;height:100%;background:var(--accent);border-radius:99px}
   .trac.done .bar i{background:var(--good)}
@@ -357,6 +366,34 @@
       </div>
 
       <div class="card">
+        <h2>למדתי כבר</h2>
+        <p class="sub">סימון משניות שלמדת מחוץ לאתר. הן ייספרו בהש״ס כנלמדות —
+        בלי נקודות, בלי רצף, ובלי להשפיע על המסכת שאתה לומד עכשיו.</p>
+
+        <label for="pl-seder">סדר שלם</label>
+        <div class="row">
+          <select id="pl-seder" style="flex:1"></select>
+          <button onclick="markSeder()">סמן הכל</button>
+        </div>
+
+        <label for="pl-tractate">מסכת</label>
+        <select id="pl-tractate" class="full" onchange="plTractateChanged()"></select>
+        <div class="row" style="margin-top:10px">
+          <select id="pl-scope" style="flex:1" onchange="plScopeChanged()">
+            <option value="all">את כל המסכת</option>
+            <option value="upto">עד פרק ומשנה מסוימים</option>
+          </select>
+          <button class="primary" onclick="markTractate()">סמן</button>
+        </div>
+        <div class="row hidden" id="pl-upto" style="margin-top:10px">
+          <select id="pl-chapter" onchange="plChapterChanged()" style="flex:1"></select>
+          <select id="pl-mishnah" style="flex:1"></select>
+        </div>
+
+        <div id="pl-marked" style="margin-top:16px"></div>
+      </div>
+
+      <div class="card">
         <h2>החשבון</h2>
         <p class="sub" id="set-account">—</p>
         <button class="danger wide" style="margin-top:12px" onclick="logout()">
@@ -382,7 +419,7 @@
 </div>
 
 <div class="actions hidden" id="actions"><div class="inner">
-  <button class="primary wide" id="btn-done" onclick="markDone()">סיימתי ללמוד</button>
+  <button class="primary wide" id="btn-done" onclick="primaryAction()">סיימתי ללמוד</button>
 </div></div>
 
 <div class="toast" id="toast"></div>
@@ -572,6 +609,11 @@ function renderPortion(){
   host.textContent = "";
   if (!portion) return;
   for (const m of portion.mishnayot) host.appendChild(mishnahCard(m, portion.tractate));
+  if (extraView){
+    const card = mishnahCard(extraView, portion.tractate);
+    card.classList.add("extra");
+    host.appendChild(card);
+  }
 }
 
 // ---------- tabs ----------
@@ -591,6 +633,10 @@ function switchTab(name){
 // ---------- boot ----------
 async function boot(){
   await tick();
+  // Anything revealed past the quota is either logged by now - and so part of
+  // the portion the server returns - or was abandoned. Either way it should
+  // not survive a reload as a phantom extra card.
+  clearExtra();
   try { state = await api("/study/today"); }
   catch (err){
     if (err.code === "no_active_plan"){ await startOnboarding(); return; }
@@ -639,15 +685,78 @@ function renderStrip(){
       `בסיום לחץ על הכפתור בתחתית המסך.</span>`;
   }
 
+  // One button, three states: finish the quota, ask for another mishnah, or
+  // finish the one you asked for. Keeping it in the same place means the next
+  // thing to press is always where the last thing was.
   const btn = document.getElementById("btn-done");
-  btn.disabled = done;
-  btn.textContent = done ? "✓ סיימת להיום"
-    : s.is_rest_day ? `למדתי בכל זאת · +${s.points_if_completed} נק׳`
-    : `סיימתי ללמוד ${left} משניות · +${s.points_if_completed} נק׳`;
+  const tractateDone = plan && plan.completed >= plan.total;
+  if (extraOrdinal !== null){
+    btn.disabled = false;
+    btn.textContent = "סיימתי ללמוד את המשנה הזו";
+  } else if (done){
+    btn.disabled = tractateDone;
+    btn.textContent = tractateDone ? "✓ סיימת את המסכת" : "ללמוד משנה נוספת ←";
+  } else {
+    btn.disabled = false;
+    btn.textContent = s.is_rest_day
+      ? `למדתי בכל זאת · +${s.points_if_completed} נק׳`
+      : `סיימתי ללמוד ${left} משניות · +${s.points_if_completed} נק׳`;
+  }
+
+  if (extraOrdinal !== null){
+    hint.innerHTML = `<b>משנה נוספת, מעבר למכסה</b><span class="step">` +
+      `היא לא מזכה בנקודות — המכסה של היום כבר נסגרה — אבל היא מקדמת אותך ` +
+      `במסכת, ומחר תתחיל מאחריה.</span>`;
+  } else if (done && !tractateDone){
+    hint.innerHTML = `<b>✓ סיימת את המכסה של היום</b><span class="step">` +
+      `הרצף שלך: ${s.current_streak} ימים. רוצה להמשיך? אפשר ללמוד עוד משניות ` +
+      `היום — הן יקדמו אותך במסכת.</span>`;
+  }
 
   document.getElementById("p-streak").textContent = s.current_streak;
   document.getElementById("p-longest").textContent = s.longest_streak;
   document.getElementById("p-points").textContent = s.total_points;
+}
+
+// ---------- learning past the daily quota ----------
+// One unrevealed mishnah at a time: read it, mark it, ask for the next. The
+// alternative - reveal ten and tick them all - is a way to advance a tractate
+// without reading it, which is the one thing this app should not make easy.
+let extraOrdinal = null, extraView = null;
+
+function clearExtra(){ extraOrdinal = null; extraView = null; }
+
+async function revealExtra(){
+  if (!plan || plan.completed >= plan.total) return;
+  extraOrdinal = plan.completed + 1;
+  extraView = await api(`/study/mishnah/${extraOrdinal}`);
+  renderPortion();
+  renderStrip();
+  document.querySelector("#portion .mishnah.extra")
+    ?.scrollIntoView({behavior: "smooth", block: "start"});
+}
+
+async function logExtra(){
+  if (extraOrdinal === null || logging) return;
+  logging = true;
+  document.getElementById("btn-done").disabled = true;
+  try {
+    const r = await api("/study/log", {method: "POST", body: {units: 1},
+                                       idempotencyKey: `extra:${extraOrdinal}`});
+    clearExtra();
+    if (r.plan_completed){ finishedTractate = plan.tractate; await boot(); return; }
+    toast("נרשם · אפשר להמשיך למשנה הבאה");
+    await boot();
+  } finally {
+    logging = false;
+  }
+}
+
+// The bottom button means whatever the screen is currently asking for.
+function primaryAction(){
+  if (extraOrdinal !== null) return logExtra();
+  if (state.optional_goal - state.completed_units > 0) return markDone();
+  return revealExtra();
 }
 
 let logging = false;
@@ -754,6 +863,7 @@ async function loadShas(){
       const p = t.total ? Math.round(t.learned / t.total * 100) : 0;
       row.innerHTML =
         `<span class="nm">${t.name_he}${t.is_active?'<span class="badge">נוכחית</span>':""}` +
+        `${t.marked_prior?'<span class="badge prior">סומן</span>':""}` +
         `${t.is_complete?" ✓":""}</span>` +
         `<span class="bar"><i style="width:${p}%"></i></span>` +
         `<span class="cnt">${t.learned}/${t.total}</span>`;
@@ -794,6 +904,19 @@ function loadSettings(){
   sw.innerHTML = tractates.map(t =>
     `<option value="${t.slug}">${t.name_he} — ${t.mishnayot} משניות</option>`).join("");
   swTractateChanged();
+
+  const sederSel = document.getElementById("pl-seder");
+  if (!sederSel.options.length){
+    const sedarim = [...new Set(tractates.map(t => t.seder))];
+    sederSel.innerHTML = sedarim.map(s => {
+      const n = tractates.filter(t => t.seder === s)
+                         .reduce((sum, t) => sum + t.mishnayot, 0);
+      return `<option value="${s}">סדר ${SEDER_NAMES[s] || s} — ${n} משניות</option>`;
+    }).join("");
+    document.getElementById("pl-tractate").innerHTML = tractates.map(t =>
+      `<option value="${t.slug}">${t.name_he} — ${t.mishnayot} משניות</option>`).join("");
+  }
+  loadPrior();
 }
 function setPreview(){
   const goal = Number(document.getElementById("set-goal").value);
@@ -850,6 +973,117 @@ async function switchTractate(){
   toast(`עברת ל${r.tractate} · סיום משוער ${r.estimated_end_date}`);
   browseOrdinal = null;
   await boot(); switchTab("today");
+}
+
+// ---------- "I already learned this" ----------
+// Counts towards the Shas overview and nothing else. It is a statement about
+// the past, so it earns no points and touches no streak - which is also why
+// the server keeps it in its own table rather than as a wound-forward plan.
+const SEDER_NAMES = {zeraim:"זרעים", moed:"מועד", nashim:"נשים",
+                     nezikin:"נזיקין", kodashim:"קדשים", taharot:"טהרות"};
+let priorMarks = {}, plChapters = [];
+
+function sederOf(slug){ return (tractates.find(t => t.slug === slug) || {}).seder; }
+function tractateBySlug(slug){ return tractates.find(t => t.slug === slug); }
+
+async function loadPrior(){
+  priorMarks = (await api("/me/prior-learning")).marks || {};
+  renderPrior();
+}
+
+function renderPrior(){
+  const host = document.getElementById("pl-marked");
+  const slugs = Object.keys(priorMarks);
+  if (!slugs.length){
+    host.innerHTML = `<p class="sub">עדיין לא סימנת כלום.</p>`;
+    return;
+  }
+  // Grouped by seder, because "I learned all of Zeraim" should read as one
+  // line rather than eleven.
+  const bySeder = {};
+  for (const slug of slugs){
+    const t = tractateBySlug(slug); if (!t) continue;
+    (bySeder[t.seder] ||= []).push({t, ordinal: priorMarks[slug]});
+  }
+  host.innerHTML = "";
+  for (const [seder, rows] of Object.entries(bySeder)){
+    const total = rows.reduce((n, r) => n + r.ordinal, 0);
+    const head = document.createElement("div");
+    head.className = "kv";
+    head.innerHTML = `<span><b>סדר ${SEDER_NAMES[seder] || seder}</b>` +
+      `<br><small style="color:var(--muted);font-weight:400">` +
+      `${rows.length} מסכתות · ${total.toLocaleString("he-IL")} משניות</small></span>`;
+    const clear = document.createElement("button");
+    clear.className = "small danger"; clear.textContent = "נקה סדר";
+    clear.onclick = () => clearMarks(rows.map(r => r.t.slug));
+    head.appendChild(clear);
+    host.appendChild(head);
+
+    for (const {t, ordinal} of rows.sort((a,b) => a.t.name_he.localeCompare(b.t.name_he))){
+      const row = document.createElement("div");
+      row.className = "kv";
+      const whole = ordinal >= t.mishnayot;
+      row.innerHTML = `<span style="font-weight:400">${t.name_he} — ` +
+        (whole ? "כל המסכת" : `${ordinal} מתוך ${t.mishnayot} משניות`) + `</span>`;
+      const x = document.createElement("button");
+      x.className = "small"; x.textContent = "הסר";
+      x.onclick = () => clearMarks([t.slug]);
+      row.appendChild(x);
+      host.appendChild(row);
+    }
+  }
+}
+
+async function saveMarks(marks, message){
+  priorMarks = (await api("/me/prior-learning",
+    {method:"PUT", body:{marks: {...priorMarks, ...marks}}})).marks || {};
+  renderPrior();
+  toast(message);
+  if (tab === "shas") loadShas();
+}
+
+function markSeder(){
+  const seder = document.getElementById("pl-seder").value;
+  const inSeder = tractates.filter(t => t.seder === seder);
+  const marks = Object.fromEntries(inSeder.map(t => [t.slug, t.mishnayot]));
+  const count = inSeder.reduce((n, t) => n + t.mishnayot, 0);
+  if (!confirm(`לסמן את כל סדר ${SEDER_NAMES[seder]} כנלמד?\n` +
+               `${inSeder.length} מסכתות, ${count.toLocaleString("he-IL")} משניות.`)) return;
+  return saveMarks(marks, `סדר ${SEDER_NAMES[seder]} סומן כנלמד`);
+}
+
+function markTractate(){
+  const slug = document.getElementById("pl-tractate").value;
+  const t = tractateBySlug(slug);
+  if (!t) return;
+  let ordinal = t.mishnayot, label = "כל המסכת";
+  if (document.getElementById("pl-scope").value === "upto"){
+    const ch = document.getElementById("pl-chapter").value;
+    const mi = document.getElementById("pl-mishnah").value;
+    ordinal = ordinalOf(plChapters, ch, mi);
+    label = `עד פרק ${gematria(Number(ch))} משנה ${gematria(Number(mi))}`;
+  }
+  return saveMarks({[slug]: ordinal}, `${t.name_he} — ${label}`);
+}
+
+function clearMarks(slugs){
+  return saveMarks(Object.fromEntries(slugs.map(s => [s, 0])), "הסימון הוסר");
+}
+
+async function plTractateChanged(){
+  const slug = document.getElementById("pl-tractate").value;
+  plChapters = (await api(`/tractates/${slug}/structure`)).chapters;
+  fillChapters(document.getElementById("pl-chapter"), plChapters);
+  plChapterChanged();
+}
+function plChapterChanged(){
+  fillMishnayot(document.getElementById("pl-mishnah"), plChapters,
+                document.getElementById("pl-chapter").value);
+}
+function plScopeChanged(){
+  const upto = document.getElementById("pl-scope").value === "upto";
+  document.getElementById("pl-upto").classList.toggle("hidden", !upto);
+  if (upto && !plChapters.length) plTractateChanged();
 }
 
 // ---------- onboarding ----------

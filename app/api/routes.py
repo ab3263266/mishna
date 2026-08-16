@@ -21,6 +21,7 @@ from app.models import (
     PlanStatus,
     StudyEvent,
     PointTransaction,
+    PriorLearning,
     ShopItem,
     StudyDay,
     StudyPlan,
@@ -496,6 +497,12 @@ def _portion_ordinals(session, plan, day) -> list[int]:
     # so fall back to the current goal rather than previewing the wrong number
     # of mishnayot from the new tractate.
     count = day.required_units if day.plan_id == plan.id else 0
+
+    # Never fewer than what was actually learned today. Someone who carries on
+    # past the quota has those mishnayot counted against the plan, and a screen
+    # that drops them the moment they are logged reads as if the app lost them.
+    count = max(count, int(logged_today))
+
     return [start + offset for offset in range(count or plan.daily_goal)]
 
 
@@ -678,6 +685,33 @@ def switch_plan(payload: SwitchIn, user: CurrentUser, session: DbSession) -> dic
     }
 
 
+class PriorLearningIn(BaseModel):
+    #: {tractate_slug: ordinal}. 0 clears a tractate. Applied as one set so
+    #: that marking a whole seder is a single request.
+    marks: dict[str, int] = Field(default_factory=dict, max_length=100)
+
+
+@router.get("/me/prior-learning")
+def get_prior_learning(user: CurrentUser, session: DbSession) -> dict:
+    return {"marks": progress.prior_learning(session, user)}
+
+
+@router.put("/me/prior-learning")
+def put_prior_learning(
+    payload: PriorLearningIn, user: CurrentUser, session: DbSession
+) -> dict:
+    """Mark mishnayot learned before, or away from, this app.
+
+    Counts towards the Shas overview and nothing else: no points, no streak,
+    no day rows. It is a statement about the past, not study this app watched.
+    """
+    try:
+        marks = progress.set_prior_learning(session, user, payload.marks)
+    except StudyError as exc:
+        raise _handle(exc)
+    return {"marks": marks}
+
+
 @router.get("/tractates/{slug}/structure")
 def tractate_structure(slug: str, session: DbSession) -> dict:
     tractate = session.execute(
@@ -718,6 +752,15 @@ def shas_overview(user: CurrentUser, session: DbSession) -> dict:
             .group_by(StudyPlan.tractate_id)
         ).all()
     )
+    # Marked as learned elsewhere. Merged by taking the furthest of the two,
+    # never the sum: both count from the start of the tractate, so adding them
+    # would double-count everything the learner covered twice.
+    prior = dict(
+        session.execute(
+            select(PriorLearning.tractate_id, PriorLearning.ordinal)
+            .where(PriorLearning.user_id == user.id)
+        ).all()
+    )
     active = _current_plan(session, user)
     active_id = active.tractate_id if active else None
 
@@ -725,7 +768,10 @@ def shas_overview(user: CurrentUser, session: DbSession) -> dict:
     for tractate in session.execute(
         select(Tractate).order_by(Tractate.order_index)
     ).scalars():
-        learned = min(furthest.get(tractate.id, 0), tractate.mishnayot_count)
+        learned = min(
+            max(furthest.get(tractate.id, 0), prior.get(tractate.id, 0)),
+            tractate.mishnayot_count,
+        )
         bucket = sedarim.setdefault(
             tractate.seder,
             {"seder": tractate.seder, "name_he": SEDER_HE.get(tractate.seder, ""),
@@ -739,6 +785,7 @@ def shas_overview(user: CurrentUser, session: DbSession) -> dict:
             "chapters": tractate.chapter_count,
             "is_active": tractate.id == active_id,
             "is_complete": learned >= tractate.mishnayot_count,
+            "marked_prior": prior.get(tractate.id, 0),
         })
         bucket["learned"] += learned
         bucket["total"] += tractate.mishnayot_count

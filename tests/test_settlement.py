@@ -362,3 +362,61 @@ def test_the_ledger_always_reconciles_with_the_balance(session, user):
 
     stats = session.get(UserStats, user.id)
     assert rebuild_balance(session, user.id) == stats.total_points
+
+
+# --------------------------------------------------------------------------- #
+# Learning that happened before, or away from, this app
+# --------------------------------------------------------------------------- #
+
+
+def test_marking_prior_learning_earns_nothing(session, user):
+    """It is a statement about the past. Any points or streak here would be
+    invented history in the table the whole economy trusts."""
+    from app.services import progress
+
+    stats = session.get(UserStats, user.id)
+    progress.set_prior_learning(session, user, {"berakhot": 57})
+    session.commit()
+
+    session.refresh(stats)
+    assert stats.total_points == 0
+    assert stats.current_streak == 0
+    assert stats.total_units_completed == 0
+    assert statuses(session, user) == {}, "no day rows either"
+
+
+def test_prior_learning_is_clamped_to_the_tractate(session, user):
+    """'I finished it' should not require knowing the exact count."""
+    from app.services import progress
+
+    marks = progress.set_prior_learning(session, user, {"berakhot": 9999})
+    assert marks == {"berakhot": 57}
+
+
+def test_marking_zero_clears_a_tractate(session, user):
+    from app.services import progress
+
+    progress.set_prior_learning(session, user, {"berakhot": 20})
+    assert progress.set_prior_learning(session, user, {"berakhot": 0}) == {}
+
+
+def test_an_unknown_tractate_is_rejected(session, user):
+    from app.services import progress
+
+    with pytest.raises(study.StudyError) as exc:
+        progress.set_prior_learning(session, user, {"no-such-tractate": 5})
+    assert exc.value.code == "unknown_tractate"
+
+
+def test_prior_learning_does_not_move_the_active_plan(session, user):
+    """Marking Berakhot as already known must not skip the plan forward - the
+    learner may be going through it again deliberately."""
+    from app.services import progress
+
+    progress.set_prior_learning(session, user, {"berakhot": 57})
+    session.commit()
+
+    plan = session.execute(
+        select(StudyPlan).where(StudyPlan.user_id == user.id)
+    ).scalar_one()
+    assert plan.current_ordinal == 0

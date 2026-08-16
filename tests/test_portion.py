@@ -114,6 +114,19 @@ def test_a_day_row_from_another_plan_uses_the_current_goal(session):
     assert len(_portion_ordinals(session, new_plan, day)) == 3
 
 
+def test_learning_past_the_quota_keeps_the_extra_on_screen(session):
+    """Finishing the day does not close the tractate. Someone who carries on
+    has those mishnayot counted against the plan, so a portion pinned to the
+    quota would drop them the moment they were logged."""
+    plan = make_plan(session, current_ordinal=13, goal=2)
+    day = make_day(session, plan, required=2, completed=3,
+                   status=DayStatus.COMPLETED)
+    log_event(session, plan, 2, to_ordinal=12)   # the quota
+    log_event(session, plan, 1, to_ordinal=13)   # one more, past it
+
+    assert _portion_ordinals(session, plan, day) == [11, 12, 13]
+
+
 def test_a_rest_day_still_previews_the_daily_goal(session):
     """A rest day requires nothing, but the portion stays on screen: reading it
     is optional, not forbidden, and an empty study tab reads as broken."""

@@ -238,6 +238,77 @@ def switch_tractate(
     return new_plan, projection
 
 
+# --------------------------------------------------------------------------- #
+# Learning that happened before, or away from, this app
+# --------------------------------------------------------------------------- #
+
+
+def set_prior_learning(
+    session: Session, user: User, marks: dict[str, int]
+) -> dict[str, int]:
+    """Record how far the learner already got in each named tractate.
+
+    `marks` is {tractate_slug: ordinal}; an ordinal of 0 clears the tractate.
+    The whole set is applied in one call so that marking a seder is one
+    request and one transaction rather than eleven of each.
+    """
+    from app.models import PriorLearning
+
+    tractates = {
+        t.slug: t
+        for t in session.execute(
+            select(Tractate).where(Tractate.slug.in_(marks.keys()))
+        ).scalars()
+    }
+    unknown = set(marks) - set(tractates)
+    if unknown:
+        raise StudyError(
+            "unknown_tractate", f"no tractate {', '.join(sorted(unknown))!r}", 404
+        )
+
+    existing = {
+        row.tractate_id: row
+        for row in session.execute(
+            select(PriorLearning).where(PriorLearning.user_id == user.id)
+        ).scalars()
+    }
+
+    for slug, ordinal in marks.items():
+        tractate = tractates[slug]
+        # Clamped rather than rejected: "I finished it" is the common case and
+        # the client should not have to know the exact count to say so.
+        ordinal = max(0, min(int(ordinal), tractate.mishnayot_count))
+        row = existing.get(tractate.id)
+
+        if ordinal == 0:
+            if row is not None:
+                session.delete(row)
+            continue
+        if row is None:
+            session.add(
+                PriorLearning(
+                    user_id=user.id, tractate_id=tractate.id, ordinal=ordinal
+                )
+            )
+        else:
+            row.ordinal = ordinal
+
+    session.flush()
+    return prior_learning(session, user)
+
+
+def prior_learning(session: Session, user: User) -> dict[str, int]:
+    """{tractate_slug: ordinal} for everything the user marked as already known."""
+    from app.models import PriorLearning
+
+    rows = session.execute(
+        select(Tractate.slug, PriorLearning.ordinal)
+        .join(PriorLearning, PriorLearning.tractate_id == Tractate.id)
+        .where(PriorLearning.user_id == user.id)
+    ).all()
+    return {slug: ordinal for slug, ordinal in rows}
+
+
 def chapter_structure(session: Session, tractate: Tractate) -> list[dict]:
     """[{chapter, mishnayot, first_ordinal}] — drives the chapter picker."""
     from sqlalchemy import func as sa_func

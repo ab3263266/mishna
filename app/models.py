@@ -353,6 +353,37 @@ class StudyPlan(Base):
     )
 
 
+class PriorLearning(Base):
+    """Mishnayot the user learned before this app, or away from it.
+
+    Deliberately *not* a StudyPlan with the cursor wound forward. A plan is a
+    record of days this app judged; this is a declaration about the past, worth
+    nothing in points and nothing to the streak. Conflating them would put
+    invented history into the table the whole economy trusts.
+
+    One row per tractate, holding how many mishnayot from its start are
+    already known. The Shas view takes the furthest of this and the real plans.
+    """
+
+    __tablename__ = "prior_learning"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    tractate_id: Mapped[int] = mapped_column(
+        ForeignKey("tractates.id", ondelete="CASCADE"), primary_key=True
+    )
+    #: Counted from the beginning of the tractate, like `plans.current_ordinal`.
+    ordinal: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint("ordinal >= 0", name="ck_prior_non_negative"),
+    )
+
+
 # --------------------------------------------------------------------------- #
 # The day ledger
 # --------------------------------------------------------------------------- #

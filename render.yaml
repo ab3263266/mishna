@@ -10,12 +10,21 @@ services:
   - type: web
     name: mishnah-tracker
     runtime: docker
-    plan: starter          # free sleeps after 15 min; a daily-habit app should not
+    # `free` spins down after 15 minutes idle and takes ~1 minute to wake. For
+    # an app opened once a day that lands on a cold service every single time,
+    # so move to `starter` once it is more than a trial.
+    plan: free
     region: frankfurt      # closest Render region to Israel
     healthCheckPath: /health
     envVars:
+      # Set by hand, from Neon. Render's own free Postgres is deleted 30 days
+      # after creation, which is not a place to keep a streak.
+      #
+      # Neon hands you a `postgresql://` URL; this app drives psycopg 3, so the
+      # scheme must read `postgresql+psycopg://`. (app/core/config.py rewrites
+      # it either way - this is belt and braces.)
       - key: DATABASE_URL
-        fromDatabase: { name: mishnah-db, property: connectionString }
+        sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: DEV_MODE
@@ -33,7 +42,5 @@ services:
       - key: GOOGLE_REDIRECT_URI
         sync: false        # <PUBLIC_BASE_URL>/api/v1/auth/google/callback
 
-databases:
-  - name: mishnah-db
-    plan: basic-256mb
-    region: frankfurt
+# No `databases:` block on purpose. Postgres comes from Neon, whose free tier
+# does not expire; Render's does, 30 days after you create it.

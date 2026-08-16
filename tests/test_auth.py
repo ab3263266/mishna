@@ -224,3 +224,24 @@ def test_logout_revokes_the_session(client) -> None:
     register(client)
     assert client.post("/api/v1/auth/logout").json() == {"ok": True}
     assert client.post("/api/v1/auth/refresh").status_code == 401
+
+
+# --------------------------------------------------------------------------- #
+# Configuration that only bites on a real host
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize("given,expected", [
+    ("postgresql://u:p@host/db", "postgresql+psycopg://u:p@host/db"),
+    ("postgres://u:p@host/db?sslmode=require",
+     "postgresql+psycopg://u:p@host/db?sslmode=require"),
+    ("postgresql+psycopg://u:p@host/db", "postgresql+psycopg://u:p@host/db"),
+    ("sqlite+pysqlite:///./mishnah.db", "sqlite+pysqlite:///./mishnah.db"),
+])
+def test_a_providers_postgres_url_is_pointed_at_psycopg3(given, expected) -> None:
+    """Every managed Postgres hands out `postgresql://`, SQLAlchemy reads that
+    as psycopg 2, and psycopg 2 is not installed - so pasting the connection
+    string exactly as given used to kill the app at boot."""
+    from app.core.config import normalise_database_url
+
+    assert normalise_database_url(given) == expected

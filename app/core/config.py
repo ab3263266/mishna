@@ -71,4 +71,20 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    settings.database_url = normalise_database_url(settings.database_url)
+    return settings
+
+
+def normalise_database_url(url: str) -> str:
+    """Point a bare `postgresql://` URL at psycopg 3.
+
+    Every managed Postgres hands out `postgresql://…`, and SQLAlchemy reads
+    that as psycopg **2**, which is not installed - so the app dies at boot
+    with `No module named 'psycopg2'`. Copying the connection string from the
+    provider is the obvious thing to do, so it should be the thing that works.
+    """
+    for prefix in ("postgresql://", "postgres://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix):]
+    return url

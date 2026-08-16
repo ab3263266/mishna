@@ -609,12 +609,21 @@ function renderPortion(){
   const host = document.getElementById("portion");
   host.textContent = "";
   if (!portion) return;
-  for (const m of portion.mishnayot) host.appendChild(mishnahCard(m, portion.tractate));
+
+  // Focus view: the extra mishnah alone, so there is exactly one thing to read.
   if (extraView){
     const card = mishnahCard(extraView, portion.tractate);
     card.classList.add("extra");
     host.appendChild(card);
+    const back = document.createElement("button");
+    back.className = "wide";
+    back.textContent = "← חזרה למנה של היום";
+    back.onclick = exitExtra;
+    host.appendChild(back);
+    return;
   }
+
+  for (const m of portion.mishnayot) host.appendChild(mishnahCard(m, portion.tractate));
 }
 
 // ---------- tabs ----------
@@ -695,7 +704,12 @@ function renderStrip(){
   const btn = document.getElementById("btn-done");
   const tractateDone = plan && plan.completed >= plan.total;
   const pending = pendingOrdinal();
-  if (done && pending !== null){
+  if (extraView){
+    btn.disabled = tractateDone && extraView.done;
+    btn.textContent = extraView.done
+      ? (tractateDone ? "✓ סיימת את המסכת" : "ללמוד משנה נוספת ←")
+      : "סיימתי ללמוד את המשנה הזו";
+  } else if (done && pending !== null){
     btn.disabled = false;
     btn.textContent = "סיימתי ללמוד את המשנה הזו";
   } else if (done){
@@ -708,10 +722,16 @@ function renderStrip(){
       : `סיימתי ללמוד ${left} משניות · +${s.points_if_completed} נק׳`;
   }
 
-  if (done && pending !== null){
-    hint.innerHTML = `<b>משנה נוספת, מעבר למכסה</b><span class="step">` +
-      `היא לא מזכה בנקודות — המכסה של היום כבר נסגרה — אבל היא מקדמת אותך ` +
-      `במסכת, ומחר תתחיל מאחריה.</span>`;
+  if (extraView){
+    hint.innerHTML = extraView.done
+      ? `<b>✓ נרשמה</b><span class="step">אפשר להמשיך למשנה הבאה, או לחזור ` +
+        `למנה של היום.</span>`
+      : `<b>משנה נוספת, מעבר למכסה</b><span class="step">` +
+        `היא לא מזכה בנקודות — המכסה של היום כבר נסגרה — אבל היא מקדמת אותך ` +
+        `במסכת, ומחר תתחיל מאחריה.</span>`;
+  } else if (done && pending !== null){
+    hint.innerHTML = `<b>נשארה משנה לא מסומנת</b><span class="step">` +
+      `המכסה של היום הושלמה, אבל המשנה שלמטה עוד לא סומנה.</span>`;
   } else if (done && !tractateDone){
     hint.innerHTML = `<b>✓ סיימת את המכסה של היום</b><span class="step">` +
       `הרצף שלך: ${s.current_streak} ימים. רוצה להמשיך? אפשר ללמוד עוד משניות ` +
@@ -724,46 +744,64 @@ function renderStrip(){
 }
 
 // ---------- learning past the daily quota ----------
-// One unrevealed mishnah at a time: read it, mark it, ask for the next. The
-// alternative - reveal ten and tick them all - is a way to advance a tractate
-// without reading it, which is the one thing this app should not make easy.
-let extraOrdinal = null, extraView = null;
+// Once the quota is met the tab switches to a focus view: one mishnah on
+// screen, on its own, from the top of the page. Appending to the day's list
+// instead was worse in both directions - the new mishnah arrived at the bottom
+// where the scroll could not reach it, so pressing "another" appeared to send
+// you backwards into what you had already learned.
+//
+// One at a time is also deliberate. Reveal ten and tick them all is a way to
+// advance a tractate without reading it, which is the one thing this app
+// should not make easy.
+let extraView = null;
 
-function clearExtra(){ extraOrdinal = null; extraView = null; }
+function clearExtra(){ extraView = null; }
 
 async function revealExtra(){
   if (!plan || plan.completed >= plan.total) return;
-  extraOrdinal = plan.completed + 1;
-  extraView = await api(`/study/mishnah/${extraOrdinal}`);
+  extraView = await api(`/study/mishnah/${plan.completed + 1}`);
   renderPortion();
   renderStrip();
-  document.querySelector("#portion .mishnah.extra")
-    ?.scrollIntoView({behavior: "smooth", block: "start"});
+  window.scrollTo({top: 0, behavior: "smooth"});
 }
 
-/** The first mishnah on screen that has not been marked yet, if any.
- *
- *  Needed because the quota and the screen can disagree: finish a tractate and
- *  start another the same day, and today's row already counts the mishnah from
- *  the old one - so the day asks for two more while three cards are showing.
- *  Offering "reveal another" there would have revealed a card that was already
- *  on the screen, twice. */
+function exitExtra(){
+  clearExtra();
+  renderPortion();
+  renderStrip();
+  window.scrollTo({top: 0});
+}
+
+/** The mishnah the screen is currently waiting on, if any. */
 function pendingOrdinal(){
-  if (extraView) return extraView.ordinal;
+  if (extraView) return extraView.done ? null : extraView.ordinal;
   return portion?.mishnayot.find(m => !m.done)?.ordinal ?? null;
 }
 
 async function logOne(){
-  if (logging) return;
+  const ordinal = pendingOrdinal();
+  if (ordinal === null || logging) return;
   logging = true;
   document.getElementById("btn-done").disabled = true;
   try {
     const r = await api("/study/log", {method: "POST", body: {units: 1},
-                                       idempotencyKey: `one:${pendingOrdinal()}`});
-    clearExtra();
-    if (r.plan_completed){ finishedTractate = siyumFrom(plan); await boot(); return; }
+                                       idempotencyKey: `one:${ordinal}`});
+    if (r.plan_completed){
+      finishedTractate = siyumFrom(plan);
+      clearExtra();
+      await boot();
+      return;
+    }
     toast("נרשם · אפשר להמשיך למשנה הבאה");
+    // Stay in the focus view and refresh the card so it reads as learned,
+    // rather than snapping back to the day's list under the reader.
+    const staying = extraView !== null;
     await boot();
+    if (staying){
+      extraView = await api(`/study/mishnah/${ordinal}`);
+      renderPortion();
+      renderStrip();
+    }
   } finally {
     logging = false;
   }

@@ -285,6 +285,25 @@ def test_switching_to_a_five_day_week_reclassifies_today(session, user):
     assert day.required_units == 0, "today stopped asking for anything"
 
 
+def test_the_last_day_of_a_tractate_counts_even_when_it_is_short(session, user):
+    """Berakhot is 57 mishnayot, so a goal of 2 leaves a final day of 1. That
+    day cannot reach its quota, and finishing a masechta on a day that scores
+    nothing is a strange way to be congratulated."""
+    plan = session.execute(
+        select(StudyPlan).where(StudyPlan.user_id == user.id)
+    ).scalar_one()
+    plan.current_ordinal = 56  # one mishnah left
+    session.commit()
+
+    result = log(session, user, 2, at(MONDAY, 9))
+
+    assert result.units_logged == 1, "clamped to what is left in the tractate"
+    assert result.plan_completed
+    assert result.day_completed, "the siyum day is credited"
+    assert result.points_awarded > 0
+    assert statuses(session, user)[MONDAY] == DayStatus.COMPLETED
+
+
 # --------------------------------------------------------------------------- #
 # Idempotency - the property the whole design rests on
 # --------------------------------------------------------------------------- #
@@ -314,6 +333,24 @@ def test_a_replayed_log_request_does_not_double_the_cursor(session, user):
         select(StudyPlan).where(StudyPlan.user_id == user.id)
     ).scalar_one()
     assert plan.current_ordinal == 2
+
+
+def test_two_learners_can_send_the_same_idempotency_key(session, user):
+    """The key is chosen by a client that knows nothing about other accounts,
+    so "today's date and how far I had got" is a key everyone picks. Matching
+    on it globally answered the second learner with "already applied" and threw
+    their study away."""
+    other = make_user(session, StudyWeek.SEVEN_DAYS)
+    key = "2026-08-10:0"
+
+    first = study.log_study(session, user, 2, now=at(MONDAY, 9), idempotency_key=key)
+    second = study.log_study(session, other, 2, now=at(MONDAY, 9), idempotency_key=key)
+
+    assert first.units_logged == 2
+    assert second.units_logged == 2, "the second learner's study must not vanish"
+
+    plans = session.execute(select(StudyPlan)).scalars().all()
+    assert [p.current_ordinal for p in plans] == [2, 2]
 
 
 def test_the_ledger_always_reconciles_with_the_balance(session, user):

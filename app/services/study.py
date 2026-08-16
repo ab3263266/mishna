@@ -96,8 +96,14 @@ def log_study(
     ctx = settlement.build_context(session, user, now, plan, stats)
 
     if idempotency_key:
+        # Scoped to this user. Matching on the key alone means one learner's
+        # replay guard answers for everybody: a second account sending the same
+        # key gets "already applied" and its study is silently dropped.
         existing = session.execute(
-            select(StudyEvent).where(StudyEvent.idempotency_key == idempotency_key)
+            select(StudyEvent).where(
+                StudyEvent.user_id == user.id,
+                StudyEvent.idempotency_key == idempotency_key,
+            )
         ).scalar_one_or_none()
         if existing is not None:
             return _result_from_state(session, ctx, existing.credited_local_date, 0)
@@ -133,18 +139,23 @@ def log_study(
     day.completed_units += units
     day.first_logged_at = day.first_logged_at or now
 
+    plan_completed = plan.current_ordinal >= tractate.mishnayot_count
+
     points = 0
     completed_now = False
-    if (
-        day.status not in TERMINAL_STATUSES
-        and day.completed_units >= goal_for_day(day, plan)
+    if day.status not in TERMINAL_STATUSES and (
+        day.completed_units >= goal_for_day(day, plan) or plan_completed
     ):
         # Credit immediately - waiting for the nightly job to hand out points
         # for work already done makes the app feel broken.
+        #
+        # `plan_completed` is the other way in: the last day of a tractate is
+        # short whenever the remaining mishnayot do not divide by the goal, and
+        # finishing a masechta on a day that scores nothing is a strange way to
+        # be congratulated.
         points = settlement.credit_day(session, ctx, day, source=CreditSource.APP)
         completed_now = True
 
-    plan_completed = plan.current_ordinal >= tractate.mishnayot_count
     if plan_completed:
         plan.status = PlanStatus.COMPLETED
         plan.completed_at = now

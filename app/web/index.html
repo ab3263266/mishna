@@ -149,6 +149,9 @@
       color:var(--muted);font-size:12px}
   .or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
   #pw-hint.bad{color:var(--bad)}
+  .siyum{background:color-mix(in srgb,var(--good) 12%,var(--card));
+         border-color:color-mix(in srgb,var(--good) 40%,var(--line));text-align:center}
+  .siyum h2{font-size:21px;margin-bottom:6px}
 </style>
 </head>
 <body>
@@ -204,8 +207,13 @@
   </section>
 
   <section id="screen-onboarding" class="hidden">
-    <div class="card" style="margin-top:36px">
-      <h2>מה לומדים?</h2>
+    <div class="card siyum hidden" id="siyum" style="margin-top:36px">
+      <h2 id="siyum-title">🎉 סיימת את המסכת</h2>
+      <p class="sub" id="siyum-text"></p>
+    </div>
+
+    <div class="card" id="onboarding-card" style="margin-top:36px">
+      <h2 id="ob-title">מה לומדים?</h2>
       <p class="sub">בחר מסכת, מאיפה להתחיל, וכמה משניות ביום.</p>
 
       <label for="ob-tractate">מסכת</label>
@@ -232,6 +240,10 @@
 
       <div id="ob-preview" class="hint" style="margin-top:16px"></div>
       <button class="primary wide" onclick="createPlan()">התחל ללמוד</button>
+
+      <p class="sub" style="margin-top:14px;text-align:center">
+        <a href="#" onclick="logout();return false">יציאה מהחשבון</a>
+      </p>
     </div>
   </section>
 
@@ -391,15 +403,45 @@ const API = "/api/v1";
 let token = localStorage.getItem("token") || "";
 let state = null, portion = null, plan = null, tractates = [], tab = "today";
 let browseOrdinal = null, browseMax = 1;
+// What the server offers. Fetched once at startup, because the dev endpoints
+// 404 when DEV_MODE is off and calling them anyway breaks the whole boot.
+let config = {google:false, password:true, dev_mode:false};
 
-async function api(path, {method="GET", body=null} = {}) {
+async function request(path, method, body, idempotencyKey){
   const res = await fetch(API + path, {
     method,
-    headers: {"Content-Type":"application/json", ...(token?{"Authorization":"Bearer "+token}:{})},
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? {"Authorization": "Bearer " + token} : {}),
+      ...(idempotencyKey ? {"Idempotency-Key": idempotencyKey} : {})
+    },
     body: body ? JSON.stringify(body) : null
   });
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  return {res, data: text ? JSON.parse(text) : null};
+}
+
+// Endpoints that establish a session cannot be retried through a refresh: a
+// 401 from them means the credentials were wrong, not that the token aged out.
+const NO_RETRY = ["/auth/login", "/auth/register", "/auth/refresh", "/auth/logout"];
+
+async function api(path, {method="GET", body=null, idempotencyKey=null} = {}) {
+  let {res, data} = await request(path, method, body, idempotencyKey);
+
+  // The access token lives 15 minutes. Without this, reading for a quarter of
+  // an hour and then pressing "I finished" throws you back to the login screen
+  // - with a refresh cookie sitting there that was good for another 30 days.
+  if (res.status === 401 && token && !NO_RETRY.includes(path)){
+    try {
+      const pair = await request("/auth/refresh", "POST", null);
+      if (pair.res.ok){
+        token = pair.data.access_token;
+        localStorage.setItem("token", token);
+        ({res, data} = await request(path, method, body, idempotencyKey));
+      }
+    } catch { /* fall through to the original 401 */ }
+  }
+
   if (!res.ok) {
     const d = data?.detail;
     const err = new Error(d?.message || d?.code || res.statusText);
@@ -608,12 +650,30 @@ function renderStrip(){
   document.getElementById("p-points").textContent = s.total_points;
 }
 
+let logging = false;
 async function markDone(){
   const left = state.optional_goal - state.completed_units;
-  if (left <= 0) return;
-  const r = await api("/study/log", {method:"POST", body:{units:left}});
-  toast(r.day_completed ? `יישר כוח! +${r.points_awarded} נק׳ · רצף ${r.streak}` : "נרשם");
-  await boot();
+  if (left <= 0 || logging) return;
+
+  // A double tap used to send two logs and advance the reading cursor twice.
+  // The Idempotency-Key makes the server discard the replay; disabling the
+  // button means it never gets sent in the first place.
+  logging = true;
+  const btn = document.getElementById("btn-done");
+  btn.disabled = true;
+  try {
+    const r = await api("/study/log", {method:"POST", body:{units:left},
+                                       idempotencyKey: `${state.local_date}:${state.completed_units}`});
+    if (r.plan_completed){
+      finishedTractate = plan.tractate;
+      await boot();
+      return;
+    }
+    toast(r.day_completed ? `יישר כוח! +${r.points_awarded} נק׳ · רצף ${r.streak}` : "נרשם");
+    await boot();
+  } finally {
+    logging = false;
+  }
 }
 
 // ---------- browse ----------
@@ -793,8 +853,26 @@ async function switchTractate(){
 }
 
 // ---------- onboarding ----------
+// Set when a tractate is finished, so the onboarding screen can mark the siyum
+// instead of silently becoming a form. Finishing a masechta is the moment the
+// whole app exists for; dropping the learner into "מה לומדים?" with no
+// acknowledgement reads like the app lost their plan.
+let finishedTractate = null;
+function renderSiyum(){
+  const box = document.getElementById("siyum");
+  box.classList.toggle("hidden", !finishedTractate);
+  document.getElementById("onboarding-card").style.marginTop =
+    finishedTractate ? "0" : "36px";
+  if (!finishedTractate) return;
+  document.getElementById("siyum-title").textContent = `🎉 סיימת את מסכת ${finishedTractate}!`;
+  document.getElementById("siyum-text").textContent =
+    `הדרן עלך. ההתקדמות נשמרה ומופיעה בלשונית הש״ס — בחר מה ללמוד הלאה.`;
+  document.getElementById("ob-title").textContent = "מה לומדים עכשיו?";
+}
+
 async function startOnboarding(){
   tractates = await api("/tractates");
+  renderSiyum();
   document.getElementById("ob-tractate").innerHTML = tractates.map(t =>
     `<option value="${t.slug}">${t.name_he} — ${t.mishnayot} משניות</option>`).join("");
   await obTractateChanged();
@@ -841,6 +919,8 @@ async function createPlan(){
   const mi = Number(document.getElementById("ob-mishnah").value);
   if (ch !== 1 || mi !== 1)
     await api("/plans/current", {method:"PUT", body:{start_chapter:ch, start_mishnah:mi}});
+  finishedTractate = null;
+  renderSiyum();
   await boot();
   toast("בהצלחה! המשניות של היום מוכנות.");
 }
@@ -917,10 +997,20 @@ async function devLogin(){
   token = d.access_token; localStorage.setItem("token", token); await boot();
 }
 async function tick(){
+  // /dev/* is mounted only when DEV_MODE is on. boot() awaits this, so calling
+  // it unconditionally made every page load in production throw before it
+  // reached the study screen.
+  if (!config.dev_mode) return;
   const t = await api("/dev/time");
   document.getElementById("clock").textContent =
     new Date(t.simulated_utc).toLocaleString("he-IL",
       {weekday:"short",day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
+}
+function applyConfig(){
+  document.querySelector(".devbar").classList.toggle("hidden", !config.dev_mode);
+  // The action bar clears the dev bar when there is one, and sits at the
+  // bottom when there is not.
+  document.getElementById("actions").style.bottom = config.dev_mode ? "42px" : "14px";
 }
 async function shift(delta){ await api("/dev/time",{method:"POST",body:delta}); await boot(); }
 async function grant(){ await api("/dev/grant",{method:"POST",body:{points:200}}); await boot(); loadShop(); }
@@ -940,8 +1030,6 @@ const AUTH_ERRORS = {
 };
 
 async function showLoginScreen(){
-  let config = {google:false, password:true, dev_mode:false};
-  try { config = await api("/auth/google/configured"); } catch {}
   // Always land on "sign in". Someone arriving here after a logout, or after
   // a session expired, is coming back to an account they already have.
   setPasswordMode(false);
@@ -951,7 +1039,6 @@ async function showLoginScreen(){
   document.getElementById("dev-login").classList.toggle("hidden", !config.dev_mode);
   document.getElementById("no-login").classList.toggle(
     "hidden", config.password || config.google || config.dev_mode);
-  document.querySelector(".devbar").classList.toggle("hidden", !config.dev_mode);
 
   const err = new URLSearchParams(location.search).get("auth_error");
   if (err){
@@ -974,7 +1061,17 @@ async function logout(){
   await showLoginScreen();
 }
 
+// A last line of defence. Every handler below is async and hung off an
+// onclick, so anything that throws would otherwise fail in total silence -
+// the button just does nothing and the user has no idea why.
+window.addEventListener("unhandledrejection", event => {
+  console.error(event.reason);
+  toast("שגיאה: " + (event.reason?.message || "משהו השתבש"));
+});
+
 (async () => {
+  try { config = await api("/auth/google/configured"); } catch {}
+  applyConfig();
   try { tractates = await api("/tractates"); } catch {}
 
   // The Google flow leaves the session in an HttpOnly cookie that script

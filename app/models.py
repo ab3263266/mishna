@@ -428,9 +428,19 @@ class StudyEvent(Base):
 
     #: Client-supplied Idempotency-Key header. Stops a retried POST from
     #: advancing the reading cursor twice.
-    idempotency_key: Mapped[str | None] = mapped_column(String(128), unique=True)
+    #:
+    #: Unique **per user**, never globally. The key is chosen by a client that
+    #: knows nothing about other accounts, so any natural choice ("today's date
+    #: and how far I had got") collides constantly - and a global constraint
+    #: turns one learner's key into a silent no-op for everyone else who picks
+    #: the same one.
+    idempotency_key: Mapped[str | None] = mapped_column(String(128))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "idempotency_key", name="uq_event_idempotency"),
     )
 
 

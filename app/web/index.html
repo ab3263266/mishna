@@ -219,6 +219,7 @@
     <div class="card siyum hidden" id="siyum" style="margin-top:36px">
       <h2 id="siyum-title">🎉 סיימת את המסכת</h2>
       <p class="sub" id="siyum-text"></p>
+      <div id="siyum-next" style="margin-top:16px"></div>
     </div>
 
     <div class="card" id="onboarding-card" style="margin-top:36px">
@@ -648,6 +649,9 @@ async function boot(){
   renderStrip();
   portion = await api("/study/portion");
   renderPortion();
+  // Again, now that the portion is known: the button's label depends on
+  // whether anything on screen is still unmarked.
+  renderStrip();
   loadHistory(); loadShop();
 }
 
@@ -690,7 +694,8 @@ function renderStrip(){
   // thing to press is always where the last thing was.
   const btn = document.getElementById("btn-done");
   const tractateDone = plan && plan.completed >= plan.total;
-  if (extraOrdinal !== null){
+  const pending = pendingOrdinal();
+  if (done && pending !== null){
     btn.disabled = false;
     btn.textContent = "סיימתי ללמוד את המשנה הזו";
   } else if (done){
@@ -703,7 +708,7 @@ function renderStrip(){
       : `סיימתי ללמוד ${left} משניות · +${s.points_if_completed} נק׳`;
   }
 
-  if (extraOrdinal !== null){
+  if (done && pending !== null){
     hint.innerHTML = `<b>משנה נוספת, מעבר למכסה</b><span class="step">` +
       `היא לא מזכה בנקודות — המכסה של היום כבר נסגרה — אבל היא מקדמת אותך ` +
       `במסכת, ומחר תתחיל מאחריה.</span>`;
@@ -736,15 +741,27 @@ async function revealExtra(){
     ?.scrollIntoView({behavior: "smooth", block: "start"});
 }
 
-async function logExtra(){
-  if (extraOrdinal === null || logging) return;
+/** The first mishnah on screen that has not been marked yet, if any.
+ *
+ *  Needed because the quota and the screen can disagree: finish a tractate and
+ *  start another the same day, and today's row already counts the mishnah from
+ *  the old one - so the day asks for two more while three cards are showing.
+ *  Offering "reveal another" there would have revealed a card that was already
+ *  on the screen, twice. */
+function pendingOrdinal(){
+  if (extraView) return extraView.ordinal;
+  return portion?.mishnayot.find(m => !m.done)?.ordinal ?? null;
+}
+
+async function logOne(){
+  if (logging) return;
   logging = true;
   document.getElementById("btn-done").disabled = true;
   try {
     const r = await api("/study/log", {method: "POST", body: {units: 1},
-                                       idempotencyKey: `extra:${extraOrdinal}`});
+                                       idempotencyKey: `one:${pendingOrdinal()}`});
     clearExtra();
-    if (r.plan_completed){ finishedTractate = plan.tractate; await boot(); return; }
+    if (r.plan_completed){ finishedTractate = siyumFrom(plan); await boot(); return; }
     toast("נרשם · אפשר להמשיך למשנה הבאה");
     await boot();
   } finally {
@@ -754,9 +771,17 @@ async function logExtra(){
 
 // The bottom button means whatever the screen is currently asking for.
 function primaryAction(){
-  if (extraOrdinal !== null) return logExtra();
   if (state.optional_goal - state.completed_units > 0) return markDone();
+  if (pendingOrdinal() !== null) return logOne();
   return revealExtra();
+}
+
+// Snapshot the plan being finished. `boot()` is about to fail with
+// no_active_plan and never refresh `plan`, so whatever the siyum screen needs
+// has to be taken now - including the daily goal, so the next tractate can
+// start at the pace the learner already chose.
+function siyumFrom(p){
+  return {name: p.tractate, mishnayot: p.total, goal: p.daily_goal};
 }
 
 let logging = false;
@@ -774,7 +799,7 @@ async function markDone(){
     const r = await api("/study/log", {method:"POST", body:{units:left},
                                        idempotencyKey: `${state.local_date}:${state.completed_units}`});
     if (r.plan_completed){
-      finishedTractate = plan.tractate;
+      finishedTractate = siyumFrom(plan);
       await boot();
       return;
     }
@@ -1091,24 +1116,82 @@ function plScopeChanged(){
 // instead of silently becoming a form. Finishing a masechta is the moment the
 // whole app exists for; dropping the learner into "מה לומדים?" with no
 // acknowledgement reads like the app lost their plan.
-let finishedTractate = null;
+let finishedTractate = null;   // {name, mishnayot, goal}
+let suggestion = null;         // the tractate we recommend next
+
+/** The next tractate to offer: the first one in Shas order that is not
+ *  already finished. Ordering the whole Shas and picking up where the learner
+ *  left off is a better answer than "here is an alphabetical list, choose",
+ *  which is what an unfilled form amounts to at the one moment they should be
+ *  celebrating rather than deciding. */
+function pickSuggestion(shas){
+  const all = shas.sedarim.flatMap(s => s.tractates.map(t => ({...t, seder: s.name_he})));
+  return all.find(t => !t.is_complete && t.learned === 0)
+      || all.find(t => !t.is_complete)
+      || null;
+}
+
 function renderSiyum(){
   const box = document.getElementById("siyum");
   box.classList.toggle("hidden", !finishedTractate);
   document.getElementById("onboarding-card").style.marginTop =
     finishedTractate ? "0" : "36px";
+  document.getElementById("ob-title").textContent =
+    finishedTractate ? "או שמשהו אחר?" : "מה לומדים?";
   if (!finishedTractate) return;
-  document.getElementById("siyum-title").textContent = `🎉 סיימת את מסכת ${finishedTractate}!`;
+
+  document.getElementById("siyum-title").textContent =
+    `🎉 סיימת את מסכת ${finishedTractate.name}!`;
   document.getElementById("siyum-text").textContent =
-    `הדרן עלך. ההתקדמות נשמרה ומופיעה בלשונית הש״ס — בחר מה ללמוד הלאה.`;
-  document.getElementById("ob-title").textContent = "מה לומדים עכשיו?";
+    `הדרן עלך. ${finishedTractate.mishnayot} משניות` +
+    (finishedTractate.shas
+      ? ` · בהש״ס: ${finishedTractate.shas.learned.toLocaleString("he-IL")} מתוך ` +
+        `${finishedTractate.shas.total.toLocaleString("he-IL")}`
+      : "");
+
+  const next = document.getElementById("siyum-next");
+  if (!suggestion){
+    next.innerHTML = `<p class="sub">סיימת את כל הש״ס. אין מה להציע — יישר כוח.</p>`;
+    return;
+  }
+  next.textContent = "";
+  const label = document.createElement("p");
+  label.className = "sub";
+  label.textContent = `הבא בתור — סדר ${suggestion.seder}:`;
+  const go = document.createElement("button");
+  go.className = "primary wide";
+  go.style.marginTop = "8px";
+  go.textContent = `התחל את מסכת ${suggestion.name_he} · ${suggestion.total} משניות`;
+  go.onclick = () => startSuggested();
+  next.append(label, go);
+}
+
+async function startSuggested(){
+  const goal = finishedTractate?.goal || 2;
+  await api("/plans", {method:"POST",
+                       body:{tractate_slug: suggestion.slug, daily_goal: goal}});
+  const name = suggestion.name_he;
+  finishedTractate = null; suggestion = null;
+  renderSiyum();
+  await boot();
+  toast(`מתחילים את מסכת ${name} · ${goal} משניות ביום`);
 }
 
 async function startOnboarding(){
   tractates = await api("/tractates");
+  if (finishedTractate){
+    // Only after a siyum: on a first visit there is nothing to pick up from,
+    // and an extra request before the very first screen is a slower start.
+    try {
+      const shas = await api("/shas");
+      finishedTractate.shas = shas;
+      suggestion = pickSuggestion(shas);
+    } catch { suggestion = null; }
+  }
   renderSiyum();
   document.getElementById("ob-tractate").innerHTML = tractates.map(t =>
     `<option value="${t.slug}">${t.name_he} — ${t.mishnayot} משניות</option>`).join("");
+  if (suggestion) document.getElementById("ob-tractate").value = suggestion.slug;
   await obTractateChanged();
   show("onboarding");
 }
@@ -1153,7 +1236,7 @@ async function createPlan(){
   const mi = Number(document.getElementById("ob-mishnah").value);
   if (ch !== 1 || mi !== 1)
     await api("/plans/current", {method:"PUT", body:{start_chapter:ch, start_mishnah:mi}});
-  finishedTractate = null;
+  finishedTractate = null; suggestion = null;
   renderSiyum();
   await boot();
   toast("בהצלחה! המשניות של היום מוכנות.");
